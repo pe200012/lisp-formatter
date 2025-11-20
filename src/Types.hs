@@ -4,6 +4,7 @@
 module Types
   ( FormatError(..)
   , FormatOptions(..)
+  , Special(..)
   , QuoteKind(..)
   , DelimiterType(..)
   , SExpr(..)
@@ -21,12 +22,16 @@ newtype FormatError = ParseError String
   deriving ( Eq, Show )
 
 -- | Configuration for the formatter.
+data Special = Special { atom :: !Text, style :: !Int }
+  deriving ( Eq, Show, Generic )
+
+instance FromDhall Special
+
 data FormatOptions
-  = FormatOptions
-  { indentWidth        :: !Int
-  , inlineMaxWidth     :: !Int
-  , specialInlineHeads :: ![ ( Text, Int ) ]  -- atom name -> number of args to keep inline
-  }
+  = FormatOptions { indentWidth        :: !Int
+                  , inlineMaxWidth     :: !Int
+                  , specialInlineHeads :: ![ Special ]  -- dedicated type for inline head rules
+                  }
   deriving ( Eq, Show, Generic )
 
 instance FromDhall FormatOptions
@@ -38,12 +43,12 @@ defaultOptions
   { indentWidth        = 2
   , inlineMaxWidth     = 80
   , specialInlineHeads
-      = [ ( "if", 1 )      -- condition and then-branch inline
-        , ( "define", 2 )  -- name and value inline
-        , ( "let", 1 )     -- bindings inline
-        , ( "lambda", 1 )  -- params inline
-        , ( "defn", 2 )    -- name and params inline (Clojure)
-        , ( "defmacro", 2 ) -- name and params inline (Clojure)
+      = [ Special { atom = "if", style = 1 }
+        , Special { atom = "define", style = 2 }
+        , Special { atom = "let", style = 1 }
+        , Special { atom = "lambda", style = 1 }
+        , Special { atom = "defn", style = 2 }
+        , Special { atom = "defmacro", style = 2 }
         ]
   }
 

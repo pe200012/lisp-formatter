@@ -14,7 +14,7 @@ module Formatter
   , encodeString
   ) where
 
-import           Data.List  ( last )
+import           Data.List  ( find, last )
 import           Data.Maybe ( fromMaybe )
 import           Data.Text  ( Text )
 import qualified Data.Text  as T
@@ -24,6 +24,7 @@ import           Types      ( DelimiterType(..)
                             , Node(..)
                             , QuoteKind(..)
                             , SExpr(..)
+                            , Special(..)
                             )
 
 --------------------------------------------------------------------------------
@@ -93,8 +94,9 @@ formatList opts level delim nodes = case nodes of
     renderInlineHead _ _ _ _ = Nothing
 
     renderSpecialInlineHead o lvl d (NodeExpr (Atom atomName) : args) = do
-      inlineCount <- lookup atomName (specialInlineHeads o)
-      let ( inlineArgs, restArgs ) = splitAt inlineCount args
+      headRule <- find ((== atomName) . atom) (specialInlineHeads o)
+      let inlineCount = style headRule
+          ( inlineArgs, restArgs ) = splitAt inlineCount args
       inlineParts <- traverse renderCompactNode inlineArgs
       let atomText
             = indentText o lvl <> openDelim <> atomName <> " " <> T.intercalate " " inlineParts

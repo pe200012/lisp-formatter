@@ -17,7 +17,7 @@ import qualified Data.Text         as T
 
 import           Dhall             ( auto, input )
 
-import           Types             ( FormatOptions(..) )
+import           Types             ( FormatOptions(..), Special(..) )
 
 -- | Default formatter options.
 defaultOptions :: FormatOptions
@@ -26,13 +26,13 @@ defaultOptions
   { indentWidth        = 2
   , inlineMaxWidth     = 80
   , specialInlineHeads
-      = [ ( "if", 2 )      -- condition and then-branch inline
-        , ( "cond", 1 )    -- first condition inline
-        , ( "define", 2 )  -- name and value inline
-        , ( "let", 1 )     -- bindings inline
-        , ( "lambda", 1 )  -- params inline
-        , ( "defn", 2 )    -- name and params inline (Clojure)
-        , ( "defmacro", 2 ) -- name and params inline (Clojure)
+      = [ Special { atom = "if", style = 1 }      -- condition and then-branch inline
+        , Special { atom = "cond", style = 1 }    -- first condition inline
+        , Special { atom = "define", style = 2 }  -- name and value inline
+        , Special { atom = "let", style = 1 }     -- bindings inline
+        , Special { atom = "lambda", style = 1 }  -- params inline
+        , Special { atom = "defn", style = 2 }    -- name and params inline (Clojure)
+        , Special { atom = "defmacro", style = 2 } -- name and params inline (Clojure)
         ]
   }
 
@@ -47,14 +47,14 @@ setInlineMaxWidth n opts = opts { inlineMaxWidth = max 1 n }
 -- | Add or update a special inline head rule.
 setSpecialInlineHead :: Text -> Int -> FormatOptions -> FormatOptions
 setSpecialInlineHead atomName count opts
-  = opts { specialInlineHeads = ( atomName, count )
-             : filter ((/= atomName) . fst) (specialInlineHeads opts)
+  = opts { specialInlineHeads = Special { atom = atomName, style = count }
+             : filter ((/= atomName) . atom) (specialInlineHeads opts)
          }
 
 -- | Remove a special inline head rule.
 removeSpecialInlineHead :: Text -> FormatOptions -> FormatOptions
 removeSpecialInlineHead atomName opts
-  = opts { specialInlineHeads = filter ((/= atomName) . fst) (specialInlineHeads opts) }
+  = opts { specialInlineHeads = filter ((/= atomName) . atom) (specialInlineHeads opts) }
 
 -- | Read FormatOptions from a Dhall file. Returns default options if file doesn't exist or fails to parse.
 readFormatOptionsFromFile :: FilePath -> IO FormatOptions
