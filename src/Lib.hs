@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -7,11 +8,14 @@ module Lib
   , defaultOptions
   , setIndentWidth
   , setInlineMaxWidth
+  , readFormatOptionsFromFile
   , formatLispText
   , formatLisp
   ) where
 
 import           Control.Applicative  ( (<|>) )
+import           Control.Exception    ( SomeException )
+import qualified Control.Exception    as E
 import           Control.Monad        ( void )
 
 import           Data.Char            ( isSpace )
@@ -19,6 +23,10 @@ import           Data.Maybe           ( fromMaybe )
 import           Data.Text            ( Text )
 import qualified Data.Text            as T
 import           Data.Void            ( Void )
+
+import           Dhall                ( FromDhall, auto, input )
+
+import           GHC.Generics         ( Generic )
 
 import           Text.Megaparsec      ( Parsec
                                       , anySingle
@@ -36,7 +44,9 @@ import           Text.Megaparsec.Char ( char, string )
 
 -- | Configuration for the formatter.
 data FormatOptions = FormatOptions { indentWidth :: !Int, inlineMaxWidth :: !Int }
-  deriving ( Eq, Show )
+  deriving ( Eq, Show, Generic )
+
+instance FromDhall FormatOptions
 
 -- | Default formatter options.
 defaultOptions :: FormatOptions
@@ -50,20 +60,29 @@ setIndentWidth n opts = opts { indentWidth = max 0 n }
 setInlineMaxWidth :: Int -> FormatOptions -> FormatOptions
 setInlineMaxWidth n opts = opts { inlineMaxWidth = max 1 n }
 
+-- | Read FormatOptions from a Dhall file. Returns default options if file doesn't exist or fails to parse.
+readFormatOptionsFromFile :: FilePath -> IO FormatOptions
+readFormatOptionsFromFile path = do
+  result <- E.try (input auto ("./" <> T.pack path)) :: IO (Either SomeException FormatOptions)
+  case result of
+    Left _     -> pure defaultOptions
+    Right opts -> pure opts
+
 -- | Errors that may occur during formatting.
 newtype FormatError = ParseError String
   deriving ( Eq, Show )
 
 -- | Public API for formatting strict 'Text'.
 formatLispText :: FormatOptions -> Text -> Either FormatError Text
-formatLispText opts input = case runParser parser "lisp" input of
+formatLispText opts txt = case runParser parser "lisp" txt of
   Left err  -> Left . ParseError $ show err
   Right ast -> Right $ renderProgram opts ast
   where
     parser = do
       skipSpace
-      nodes <- many (try (parseComment <|> NodeExpr <$> parseExpr))
+      nodes <- many (Text.Megaparsec.try (parseComment <|> NodeExpr <$> parseExpr))
       skipSpace
+      eof
       pure nodes
 
 -- | Convenience wrapper around 'formatLispText' for 'String'.
@@ -106,7 +125,7 @@ parseList
 parseDelimitedList :: Char -> Char -> DelimiterType -> Parser SExpr
 parseDelimitedList open close delim = do
   _ <- char open
-  nodes <- manyTill parseNodeInList (try (skipSpace *> char close))
+  nodes <- manyTill parseNodeInList (Text.Megaparsec.try (skipSpace *> char close))
   pure $ List delim nodes
 
 parseNodeInList :: Parser Node
@@ -124,7 +143,7 @@ parseComment = do
 parseQuoted :: Parser SExpr
 parseQuoted
   = choice
-    [ QuoteExpr UnquoteSplicing <$> try (string ",@" *> parseExpr)
+    [ QuoteExpr UnquoteSplicing <$> Text.Megaparsec.try (string ",@" *> parseExpr)
     , QuoteExpr Unquote <$> (char ',' *> parseExpr)
     , QuoteExpr Quasiquote <$> (char '`' *> parseExpr)
     , QuoteExpr Quote <$> (char '\'' *> parseExpr)

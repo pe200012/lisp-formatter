@@ -1,0 +1,7 @@
+-- Example configuration file for lisp-formatter
+-- Save this as .lisp-format in your project directory
+-- Use Natural numbers (positive integers) prefixed with +
+
+{ indentWidth = +2      -- Number of spaces for each indentation level
+, inlineMaxWidth = +80  -- Maximum line width before wrapping
+}

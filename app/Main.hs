@@ -7,6 +7,7 @@ import qualified Data.Text.IO        as TIO
 
 import           Lib                 ( defaultOptions
                                      , formatLispText
+                                     , readFormatOptionsFromFile
                                      , setIndentWidth
                                      , setInlineMaxWidth
                                      )
@@ -16,8 +17,8 @@ import           Options.Applicative
 import           System.Exit         ( die )
 
 data CliOptions
-  = CliOptions { cliIndent      :: !Int
-               , cliInlineWidth :: !Int
+  = CliOptions { cliIndent      :: !(Maybe Int)
+               , cliInlineWidth :: !(Maybe Int)
                , cliInputPath   :: !(Maybe FilePath)
                , cliOutputPath  :: !(Maybe FilePath)
                }
@@ -38,21 +39,19 @@ main = do
 cliOptionsParser :: Parser CliOptions
 cliOptionsParser
   = CliOptions
-  <$> option
-    auto
-    (long "indent"
-     <> metavar "N"
-     <> value 2
-     <> showDefault
-     <> help "Number of spaces used for indentation")
-  <*> option
-    auto
-    (long "inline-width"
-     <> short 'w'
-     <> metavar "N"
-     <> value 80
-     <> showDefault
-     <> help "Maximum width for keeping a form on a single line")
+  <$> optional
+    (option
+      auto
+      (long "indent"
+       <> metavar "N"
+       <> help "Number of spaces used for indentation"))
+  <*> optional
+    (option
+      auto
+      (long "inline-width"
+       <> short 'w'
+       <> metavar "N"
+       <> help "Maximum width for keeping a form on a single line"))
   <*> optional
     (strOption
        (long "in"
@@ -68,10 +67,14 @@ cliOptionsParser
 
 runFormatter :: CliOptions -> IO ()
 runFormatter cli = do
-  let opts
-        = setInlineMaxWidth (cliInlineWidth cli) $ setIndentWidth (cliIndent cli) $ defaultOptions
+  dhallOpts <- readFormatOptionsFromFile ".lisp-format"
+  let baseOpts = case (cliIndent cli, cliInlineWidth cli) of
+        (Nothing, Nothing) -> dhallOpts  -- Use Dhall options if no CLI options provided
+        _ -> defaultOptions  -- Start with defaults if any CLI option provided
+  let optsWithIndent = maybe baseOpts (\i -> setIndentWidth i baseOpts) (cliIndent cli)
+  let finalOpts = maybe optsWithIndent (\w -> setInlineMaxWidth w optsWithIndent) (cliInlineWidth cli)
   input <- readInput (cliInputPath cli)
-  case formatLispText opts input of
+  case formatLispText finalOpts input of
     Left err     -> die ("Failed to format input: " ++ show err)
     Right output -> writeOutput (cliOutputPath cli) output
 

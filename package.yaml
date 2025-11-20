@@ -24,6 +24,7 @@ dependencies:
 - text >= 2.0 && < 2.2
 - megaparsec >= 9.0 && < 10
 - optparse-applicative >= 0.16 && < 0.19
+- dhall >= 1.40 && < 1.43
 
 ghc-options:
 - -Wall
