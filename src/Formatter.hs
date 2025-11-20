@@ -56,6 +56,8 @@ formatList opts level delim nodes = case nodes of
   [] -> [ exprLine opts level (emptyDelim delim) ]
   _
     | Just inline <- renderInlineSimple opts level delim nodes -> [ RenderLine inline KindExpr ]
+    | Just ( lineHead, restNodes ) <- renderSpecialInlineHead opts level delim nodes
+      -> finalize (lineHead : formatRest restNodes) nodes
     | Just ( lineHead, restNodes ) <- renderInlineHead opts level delim nodes
       -> finalize (lineHead : formatRest restNodes) nodes
     | otherwise -> finalize (baseLine : body) nodes
@@ -89,6 +91,20 @@ formatList opts level delim nodes = case nodes of
         then Just ( RenderLine firstText KindExpr, rest )
         else Nothing
     renderInlineHead _ _ _ _ = Nothing
+
+    renderSpecialInlineHead o lvl d (NodeExpr (Atom atomName) : args) = do
+      inlineCount <- lookup atomName (specialInlineHeads o)
+      let ( inlineArgs, restArgs ) = splitAt inlineCount args
+      inlineParts <- traverse renderCompactNode inlineArgs
+      let atomText
+            = indentText o lvl <> openDelim <> atomName <> " " <> T.intercalate " " inlineParts
+      if T.length atomText <= inlineMaxWidth o
+        then Just ( RenderLine atomText KindExpr, restArgs )
+        else Nothing
+      where
+        renderCompactNode (NodeExpr expr) = renderCompactExpr expr
+        renderCompactNode (NodeComment _) = Nothing
+    renderSpecialInlineHead _ _ _ _ = Nothing
 
 --------------------------------------------------------------------------------
 -- Helper data types and functions

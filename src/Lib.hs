@@ -4,6 +4,8 @@ module Lib
   , defaultOptions
   , setIndentWidth
   , setInlineMaxWidth
+  , setSpecialInlineHead
+  , removeSpecialInlineHead
   , readFormatOptionsFromFile
   , formatLispText
   , formatLisp
@@ -11,8 +13,10 @@ module Lib
 
 import           Config    ( defaultOptions
                            , readFormatOptionsFromFile
+                           , removeSpecialInlineHead
                            , setIndentWidth
                            , setInlineMaxWidth
+                           , setSpecialInlineHead
                            )
 
 import           Data.Text ( Text )

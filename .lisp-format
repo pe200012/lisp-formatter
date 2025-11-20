@@ -1,1 +1,10 @@
-{ indentWidth = +4, inlineMaxWidth = +100 }
+{ indentWidth = +2
+, inlineMaxWidth = +60
+, specialInlineHeads =
+  [ { mapKey = "if", mapValue = +1 }
+  , { mapKey = "cond", mapValue = +1 }
+  , { mapKey = "define", mapValue = +2 }
+  , { mapKey = "let", mapValue = +1 }
+  , { mapKey = "my-special", mapValue = +3 }
+  ]
+}
