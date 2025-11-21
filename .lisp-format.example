@@ -4,4 +4,12 @@
 
 { indentWidth = +2      -- Number of spaces for each indentation level
 , inlineMaxWidth = +80  -- Maximum line width before wrapping
+
+ , specials =
+   [ { atom = "if", style = +1 }
+   , { atom = "cond", style = +1 }
+   , { atom = "define", style = +2 }
+   , { atom = "let", style = +1 }
+   , { atom = "my-special", style = +3 }
+   ]
 }

@@ -4,6 +4,7 @@
 module Types
   ( FormatError(..)
   , FormatOptions(..)
+  , FormatStyle(..)
   , Special(..)
   , QuoteKind(..)
   , DelimiterType(..)
@@ -21,36 +22,32 @@ import           GHC.Generics ( Generic )
 newtype FormatError = ParseError String
   deriving ( Eq, Show )
 
+-- | Formatting style for special forms.
+data FormatStyle
+  = InlineHead !Int          -- ^ Inline first N arguments, then force newlines for rest (no line width check for rest)
+  | InlineHeadOneline !Int   -- ^ Try inline all first, if fails try inline first N arguments
+  | InlineAlign !Int         -- ^ Inline first N arguments (unless exceed line width), rest align with last inlined
+  | NewlineAlign !Int        -- ^ Always newline and indent by N
+  | TryInline                -- ^ Try inline all unless line width not enough
+  deriving ( Eq, Show, Generic )
+
+instance FromDhall FormatStyle
+
 -- | Configuration for the formatter.
-data Special = Special { atom :: !Text, style :: !Int }
+data Special = Special { atom :: !Text, style :: !FormatStyle }
   deriving ( Eq, Show, Generic )
 
 instance FromDhall Special
 
 data FormatOptions
-  = FormatOptions { indentWidth        :: !Int
-                  , inlineMaxWidth     :: !Int
-                  , specialInlineHeads :: ![ Special ]  -- dedicated type for inline head rules
+  = FormatOptions { indentWidth    :: !Int
+                  , inlineMaxWidth :: !Int
+                  , defaultStyle   :: !FormatStyle  -- default formatting for atoms not in specials
+                  , specials       :: ![ Special ]  -- dedicated type for inline head rules
                   }
   deriving ( Eq, Show, Generic )
 
 instance FromDhall FormatOptions
-
--- | Default formatter options.
-defaultOptions :: FormatOptions
-defaultOptions
-  = FormatOptions
-  { indentWidth        = 2
-  , inlineMaxWidth     = 80
-  , specialInlineHeads
-      = [ Special { atom = "if", style = 1 }
-        , Special { atom = "define", style = 2 }
-        , Special { atom = "let", style = 1 }
-        , Special { atom = "lambda", style = 1 }
-        , Special { atom = "defn", style = 2 }
-        , Special { atom = "defmacro", style = 2 }
-        ]
-  }
 
 --------------------------------------------------------------------------------
 -- AST definitions

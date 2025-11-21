@@ -1,10 +1,36 @@
-{ indentWidth = +2
-, inlineMaxWidth = +60
- , specialInlineHeads =
-   [ { atom = "if", style = +1 }
-   , { atom = "cond", style = +1 }
-   , { atom = "define", style = +2 }
-   , { atom = "let", style = +1 }
-   , { atom = "my-special", style = +3 }
-   ]
-}
+let Style =
+      < InlineHead : Integer
+      | InlineHeadOneline : Integer
+      | InlineAlign : Integer
+      | NewlineAlign : Integer
+      | TryInline
+      >
+
+let Special = { atom : Text, style : Style }
+
+let LispFormatConfig =
+      { Type =
+          { indentWidth : Integer
+          , inlineMaxWidth : Integer
+          , defaultStyle : Style
+          , specials : List Special
+          }
+      , default.specials = [] : List Special
+      }
+
+in  LispFormatConfig::{
+    , indentWidth = +2
+    , inlineMaxWidth = +60
+    , defaultStyle = Style.InlineHeadOneline +1
+    , specials =
+      [ { atom = "if", style = Style.InlineHeadOneline +1 }
+      , { atom = "cond", style = Style.InlineHeadOneline +1 }
+      , { atom = "define", style = Style.InlineHeadOneline +2 }
+      , { atom = "let", style = Style.InlineHeadOneline +1 }
+      , { atom = "my-special", style = Style.InlineHeadOneline +3 }
+      , { atom = "test-head", style = Style.InlineHead +1 }
+      , { atom = "test-align", style = Style.InlineAlign +1 }
+      , { atom = "test-align2", style = Style.InlineAlign +2 }
+      , { atom = "test-try", style = Style.TryInline }
+      ]
+    }

@@ -2,121 +2,78 @@
 
 module Main ( main ) where
 
-import           Data.Text  ( Text )
-import qualified Data.Text  as T
+import           Data.List         ( isSuffixOf )
+import           Data.Text         ( Text )
+import qualified Data.Text         as T
+import qualified Data.Text.IO      as TIO
 
 import           Lib
 
+import           System.Directory  ( doesDirectoryExist, listDirectory )
+
 import           Test.Hspec
+import           Test.Hspec.Golden hiding ( output )
 
 main :: IO ()
-main = hspec spec
+main = do
+  dataFiles <- discoverDataFiles "test/data"
+  hspec (spec dataFiles)
 
-spec :: Spec
-spec = do
-  describe "formatLisp" $ do
-    it "formats an empty program" $ formatLisp defaultOptions "" `shouldBe` Right ""
+discoverDataFiles :: FilePath -> IO [ FilePath ]
+discoverDataFiles dir = do
+  exists <- doesDirectoryExist dir
+  if exists
+    then do
+      files <- listDirectory dir
+      return [ dir ++ "/" ++ f | f <- files, ".lisp" `isSuffixOf` f ]
+    else return []
 
-    it "formats simple atoms" $ formatLisp defaultOptions "foo" `shouldBe` Right "foo"
+spec :: [ FilePath ] -> Spec
+spec dataFiles = do
+  describe "formatLisp - basic formatting" $ do
+    goldenTest "empty-program" ""
+    goldenTest "simple-atom" "foo"
+    goldenTest "empty-list" "()"
+    goldenTest "simple-list" "(foo bar)"
+    goldenTest "nested-lists" "(a (b c))"
+    goldenTest "string-literals" "(print \"hello\")"
+    goldenTest "escaped-strings" "(print \"line\\nbreak\")"
+    goldenTest "quoted-expressions" "'(a b)"
+    goldenTest "quasiquoted-expressions" "`(a ,b)"
+    goldenTest "unquote-splicing" "`(a ,@rest)"
 
-    it "formats empty list" $ formatLisp defaultOptions "()" `shouldBe` Right "()"
+  describe "formatLisp - comments" $ do
+    goldenTest "comment-before-expr" "; comment\n(foo)"
+    goldenTest "inline-comment" "(foo ; comment\n  bar)"
 
-    it "formats simple list" $ formatLisp defaultOptions "(foo bar)" `shouldBe` Right "(foo bar)"
-
-    it "formats nested lists" $ formatLisp defaultOptions "(a (b c))" `shouldBe` Right "(a (b c))"
-
-    it "formats nested lists with indentation when needed"
-      $ let
-          input = "(very-long-function-name (nested arg1 arg2 arg3 arg4) another-long-argument)"
-        in 
-          formatLisp defaultOptions input `shouldSatisfy` isRight
-
-    it "formats string literals"
-      $ formatLisp defaultOptions "(print \"hello\")" `shouldBe` Right "(print \"hello\")"
-
-    it "handles escaped characters in strings"
-      $ formatLisp defaultOptions "(print \"line\\nbreak\")"
-      `shouldBe` Right "(print \"line\\nbreak\")"
-
-    it "formats quoted expressions" $ formatLisp defaultOptions "'(a b)" `shouldBe` Right "'(a b)"
-
-    it "formats quasiquoted expressions"
-      $ formatLisp defaultOptions "`(a ,b)" `shouldBe` Right "`(a ,b)"
-
-    it "formats unquote-splicing"
-      $ formatLisp defaultOptions "`(a ,@rest)" `shouldBe` Right "`(a ,@rest)"
-
-    it "preserves comments"
-      $ formatLisp defaultOptions "; comment\n(foo)" `shouldBe` Right "; comment\n(foo)"
-
-    it "formats inline comments"
-      $ formatLisp defaultOptions "(foo ; comment\n  bar)"
-      `shouldBe` Right "(foo\n  ; comment\n  bar)"
-
-  describe "formatLisp with indentation" $ do
-    it "indents long lists" $ do
-      -- This expression is exactly 68 chars, fits in default 80 width
-      let input = "(define (factorial n) (if (= n 0) 1 (* n (factorial (- n 1)))))"
-      formatLisp defaultOptions input `shouldBe` Right input
-
-    it "breaks very long lists across lines" $ do
-      let input
-            = "(define-function (calculate-fibonacci-number n) (if (less-than-or-equal n 1) n (plus (calculate-fibonacci-number (minus n 1)) (calculate-fibonacci-number (minus n 2)))))"
-      let result = formatLisp defaultOptions input
-      result `shouldSatisfy` isRight
-      let Right output = result
-      output `shouldContain` "\n"
-      output `shouldStartWith` "(define-function"
-
-    it "indents with custom indent width" $ do
-      let opts = setIndentWidth 4 defaultOptions
-      let input = "(a (b c))"
-      -- Short form stays inline regardless of indent width
-      formatLisp opts input `shouldBe` Right "(a (b c))"
+  describe "formatLisp - indentation" $ do
+    goldenTest "factorial" "(define (factorial n) (if (= n 0) 1 (* n (factorial (- n 1)))))"
+    goldenTest
+      "fibonacci-long"
+      "(define-function (calculate-fibonacci-number n) (if (less-than-or-equal n 1) n (plus (calculate-fibonacci-number (minus n 1)) (calculate-fibonacci-number (minus n 2)))))"
 
     it "uses custom indent width for multi-line forms" $ do
       let opts = setIndentWidth 4 defaultOptions
-      -- Make it long enough to definitely exceed 80 chars when inline
       let input
             = "(some-really-quite-extraordinarily-long-function-name (first-argument second-argument third-argument fourth-argument fifth-argument sixth-argument))"
-      let result = formatLisp opts input
-      result `shouldSatisfy` isRight
-      -- Should have 4-space indentation
-      let Right output = result
-      output `shouldContain` "\n"
+      let result = case formatLisp opts input of
+            Right out -> out
+            Left err  -> error $ "Format failed: " ++ show err
+      defaultGolden "custom-indent-width" result
 
-    it "handles multi-line expressions" $ do
-      let input = "(defun hello (name)\n  (print name))"
-      let result = formatLisp defaultOptions input
-      result `shouldSatisfy` isRight
+    goldenTest "multi-line-defun" "(defun hello (name)\n  (print name))"
 
-  describe "formatLisp whitespace handling" $ do
-    it "handles trailing newline"
-      $ formatLisp defaultOptions "(foo bar)\n" `shouldBe` Right "(foo bar)"
+  describe "formatLisp - whitespace handling" $ do
+    goldenTest "trailing-newline" "(foo bar)\n"
+    goldenTest "multiple-trailing-newlines" "(foo bar)\n\n\n"
+    goldenTest "leading-newlines" "\n\n(foo bar)"
+    goldenTest "leading-and-trailing-newlines" "\n\n(foo bar)\n\n"
+    goldenTest "whitespace-between-expressions" "(a)\n\n(b)"
+    goldenTest "trailing-whitespace-multiple-expressions" "(a)\n\n(b)\n\n"
+    goldenTest "empty-lists-trailing-whitespace" "(fn (if  true (let  ) ) )\n\n"
+    goldenTest "spaces-and-tabs" "  \t (foo)  \t\n"
 
-    it "handles multiple trailing newlines"
-      $ formatLisp defaultOptions "(foo bar)\n\n\n" `shouldBe` Right "(foo bar)"
-
-    it "handles leading newlines"
-      $ formatLisp defaultOptions "\n\n(foo bar)" `shouldBe` Right "(foo bar)"
-
-    it "handles leading and trailing newlines"
-      $ formatLisp defaultOptions "\n\n(foo bar)\n\n" `shouldBe` Right "(foo bar)"
-
-    it "handles whitespace between expressions"
-      $ formatLisp defaultOptions "(a)\n\n(b)" `shouldBe` Right "(a)\n(b)"
-
-    it "handles trailing whitespace with multiple expressions"
-      $ formatLisp defaultOptions "(a)\n\n(b)\n\n" `shouldBe` Right "(a)\n(b)"
-
-    it "handles empty lists with trailing whitespace"
-      $ formatLisp defaultOptions "(fn (if  true (let  ) ) )\n\n"
-      `shouldBe` Right "(fn (if true (let)))"
-
-    it "handles spaces and tabs"
-      $ formatLisp defaultOptions "  \t (foo)  \t\n" `shouldBe` Right "(foo)"
-
-  describe "formatLisp error handling" $ do
+  describe "formatLisp - error handling" $ do
     it "reports unclosed parenthesis" $ do
       let result = formatLisp defaultOptions "(foo bar"
       result `shouldSatisfy` isLeft
@@ -129,55 +86,99 @@ spec = do
       let result = formatLisp defaultOptions "(print \"hello)"
       result `shouldSatisfy` isLeft
 
-  describe "formatLispText" $ do
+  describe "formatLispText - unicode support" $ do
     it "works with Text input" $ do
       let input = "(foo bar)" :: Text
       formatLispText defaultOptions input `shouldBe` Right "(foo bar)"
 
     it "handles unicode in atoms" $ do
       let input = "(λ α β)" :: Text
-      formatLispText defaultOptions input `shouldBe` Right "(λ α β)"
+      let result = case formatLispText defaultOptions input of
+            Right out -> T.unpack out
+            Left err  -> error $ "Format failed: " ++ show err
+      defaultGolden "unicode-atoms" result
 
     it "handles unicode in strings" $ do
       let input = "(print \"こんにちは\")" :: Text
-      formatLispText defaultOptions input `shouldBe` Right "(print \"こんにちは\")"
+      let result = case formatLispText defaultOptions input of
+            Right out -> T.unpack out
+            Left err  -> error $ "Format failed: " ++ show err
+      defaultGolden "unicode-strings" result
 
-  describe "formatLisp with different delimiters" $ do
-    it "formats square brackets"
-      $ formatLisp defaultOptions "[foo bar]" `shouldBe` Right "[foo bar]"
+  describe "formatLisp - different delimiters" $ do
+    goldenTest "square-brackets" "[foo bar]"
+    goldenTest "curly-braces" "{foo bar}"
+    goldenTest "nested-mixed-delimiters" "(foo [bar {baz}])"
+    goldenTest "empty-brackets" "[]"
+    goldenTest "empty-braces" "{}"
+    goldenTest
+      "long-bracket-expression"
+      "[some-really-quite-extraordinarily-long-function-name first second third fourth fifth sixth seventh]"
+    goldenTest "clojure-vectors" "[1 2 3]"
+    goldenTest "clojure-maps" "{:key value}"
+    goldenTest "clojure-defn" "(defn add [a b] (+ a b))"
 
-    it "formats curly braces" $ formatLisp defaultOptions "{foo bar}" `shouldBe` Right "{foo bar}"
+  describe "formatLisp - special inline heads" $ do
+    it "formats if with first arg inline" $ do
+      let input = "(if (> x 10) (print \"big\") (print \"small\"))"
+      let result = case formatLisp defaultOptions input of
+            Right out -> out
+            Left err  -> error $ "Format failed: " ++ show err
+      defaultGolden "special-if" result
 
-    it "formats nested mixed delimiters"
-      $ formatLisp defaultOptions "(foo [bar {baz}])" `shouldBe` Right "(foo [bar {baz}])"
-
-    it "formats empty brackets" $ formatLisp defaultOptions "[]" `shouldBe` Right "[]"
-
-    it "formats empty braces" $ formatLisp defaultOptions "{}" `shouldBe` Right "{}"
-
-    it "handles long bracket expressions" $ do
+    it "formats define with name and value inline" $ do
       let input
-            = "[some-really-quite-extraordinarily-long-function-name first second third fourth fifth sixth seventh]"
-      let result = formatLisp defaultOptions input
-      result `shouldSatisfy` isRight
-      let Right output = result
-      output `shouldStartWith` "[some-really-quite-extraordinarily-long-function-name"
-      output `shouldContain` "\n"
+            = "(define my-long-variable-name (some-computation-that-is-quite-lengthy arg1 arg2 arg3))"
+      let result = case formatLisp defaultOptions input of
+            Right out -> out
+            Left err  -> error $ "Format failed: " ++ show err
+      defaultGolden "special-define" result
 
-    it "formats Clojure-style vectors"
-      $ formatLisp defaultOptions "[1 2 3]" `shouldBe` Right "[1 2 3]"
+  describe "formatLisp - different format styles" $ do
+    it "formats with InlineAlign style" $ do
+      let opts   = setSpecialInlineHead "test" (InlineAlign 2) defaultOptions
+          input  = "(test arg1 arg2 arg3 arg4 arg5)"
+          result = case formatLisp opts input of
+            Right out -> out
+            Left err  -> error $ "Format failed: " ++ show err
+      defaultGolden "inline-align-style" result
 
-    it "formats Clojure-style maps"
-      $ formatLisp defaultOptions "{:key value}" `shouldBe` Right "{:key value}"
+    it "formats with NewlineAlign style" $ do
+      let opts   = setSpecialInlineHead "test" (NewlineAlign 1) defaultOptions
+          input  = "(test arg1 arg2 arg3)"
+          result = case formatLisp opts input of
+            Right out -> out
+            Left err  -> error $ "Format failed: " ++ show err
+      defaultGolden "newline-align-style" result
 
-    it "formats Clojure-style code"
-      $ formatLisp defaultOptions "(defn add [a b] (+ a b))"
-      `shouldBe` Right "(defn add [a b] (+ a b))"
+    it "formats with TryInline style" $ do
+      let opts   = setSpecialInlineHead "test" TryInline defaultOptions
+          input  = "(test arg1 arg2 arg3)"
+          result = case formatLisp opts input of
+            Right out -> out
+            Left err  -> error $ "Format failed: " ++ show err
+      defaultGolden "try-inline-style" result
+
+  describe "formatLisp - test data files" $ mapM_ testDataFile dataFiles
 
 -- Helper functions
-isRight :: Either a b -> Bool
-isRight (Right _) = True
-isRight _         = False
+testDataFile :: FilePath -> Spec
+testDataFile filePath = do
+  input <- runIO (T.unpack <$> TIO.readFile filePath)
+  it ("formats " ++ name) $ do
+    let result = case formatLisp defaultOptions input of
+          Right out -> out
+          Left err  -> error $ "Format failed: " ++ show err
+    defaultGolden name result
+  where
+    name = reverse . takeWhile (/= '/') . reverse . takeWhile (/= '.') $ filePath
+
+goldenTest :: String -> String -> Spec
+goldenTest name input = it ("formats " ++ name) $ do
+  let result = case formatLisp defaultOptions input of
+        Right out -> out
+        Left err  -> error $ "Format failed: " ++ show err
+  defaultGolden name result
 
 isLeft :: Either a b -> Bool
 isLeft (Left _) = True

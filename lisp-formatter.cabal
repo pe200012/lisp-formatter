@@ -76,7 +76,9 @@ test-suite lisp-formatter-test
   build-depends:
       base >=4.7 && <5
     , dhall >=1.40 && <1.43
+    , directory ==1.3.*
     , hspec >=2.10 && <2.12
+    , hspec-golden ==0.2.*
     , lisp-formatter
     , megaparsec >=9.0 && <10
     , optparse-applicative >=0.16 && <0.19
