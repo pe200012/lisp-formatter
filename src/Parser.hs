@@ -24,6 +24,7 @@ import           Data.Text            ( Text )
 import qualified Data.Text            as T
 import           Data.Void            ( Void )
 
+import qualified Text.Megaparsec      as MP
 import           Text.Megaparsec      ( Parsec
                                       , anySingle
                                       , choice
@@ -35,7 +36,6 @@ import           Text.Megaparsec      ( Parsec
                                       , satisfy
                                       , takeWhile1P
                                       , takeWhileP
-                                      , try
                                       )
 import           Text.Megaparsec.Char ( char, string )
 
@@ -56,7 +56,7 @@ parseProgram input = case runParser parser "lisp" input of
   where
     parser = do
       skipNonNewlineSpace
-      nodes <- many (Text.Megaparsec.try (parseTopLevelNode input))
+      nodes <- many (MP.try (parseTopLevelNode input))
       trailingNewlines <- countNewlines
       skipNonNewlineSpace
       eof
@@ -79,9 +79,9 @@ parseTopLevelNode fullInput = do
     then do
       skipNonNewlineSpace
       _ <- countNewlines
-      nextStartPos <- Text.Megaparsec.getOffset
-      nextExpr <- Text.Megaparsec.try parseExpr
-      nextEndPos <- Text.Megaparsec.getOffset
+      nextStartPos <- getOffset
+      nextExpr <- MP.try parseExpr
+      nextEndPos <- getOffset
       let rawText = T.take (nextEndPos - nextStartPos) $ T.drop nextStartPos fullInput
       pure [ NodeExprRaw nextExpr rawText ]
     else pure []
@@ -113,7 +113,7 @@ parseList
 parseDelimitedList :: Char -> Char -> DelimiterType -> Parser SExpr
 parseDelimitedList open close delim = do
   _ <- char open
-  nodes <- concat <$> manyTill parseNodeInList (Text.Megaparsec.try (skipSpace *> char close))
+  nodes <- concat <$> manyTill parseNodeInList (MP.try (skipSpace *> char close))
   pure $ List delim nodes
 
 parseNodeInList :: Parser [ Node ]
@@ -135,7 +135,7 @@ parseComment = do
 parseQuoted :: Parser SExpr
 parseQuoted
   = choice
-    [ QuoteExpr UnquoteSplicing <$> Text.Megaparsec.try (string ",@" *> parseExpr)
+    [ QuoteExpr UnquoteSplicing <$> MP.try (string ",@" *> parseExpr)
     , QuoteExpr Unquote <$> (char ',' *> parseExpr)
     , QuoteExpr Quasiquote <$> (char '`' *> parseExpr)
     , QuoteExpr Quote <$> (char '\'' *> parseExpr)
