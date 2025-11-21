@@ -7,7 +7,18 @@ import           Data.Text         ( Text )
 import qualified Data.Text         as T
 import qualified Data.Text.IO      as TIO
 
-import           Lib
+import           Lib               ( AlignStyle(..)
+                                   , FormatOptions
+                                   , FormatStyle(..)
+                                   , defaultOptions
+                                   , formatLisp
+                                   , formatLispText
+                                   , readFormatOptionsFromPath
+                                   , setAlignRule
+                                   , setIndentWidth
+                                   , setPreserveBlankLines
+                                   , setSpecialInlineHead
+                                   )
 
 import           System.Directory  ( doesDirectoryExist, listDirectory )
 
@@ -139,8 +150,9 @@ spec dataFiles = do
       defaultGolden "special-define" result
 
   describe "formatLisp - different format styles" $ do
-    it "formats with InlineAlign style" $ do
-      let opts   = setSpecialInlineHead "test" (InlineAlign 2) defaultOptions
+    it "formats with InlineHead + Align style" $ do
+      let opts
+            = setAlignRule "test" Align $ setSpecialInlineHead "test" (InlineHead 2) defaultOptions
           input  = "(test arg1 arg2 arg3 arg4 arg5)"
           result = case formatLisp opts input of
             Right out -> out
@@ -169,13 +181,16 @@ spec dataFiles = do
 testDataFile :: FilePath -> Spec
 testDataFile filePath = do
   input <- runIO (T.unpack <$> TIO.readFile filePath)
+  configPath <- runIO (readFormatOptionsFromPath (Just configFilePath))
   it ("formats " ++ name) $ do
-    let result = case formatLisp defaultOptions input of
+    let result = case formatLisp configPath input of
           Right out -> out
           Left err  -> error $ "Format failed: " ++ show err
     defaultGolden name result
   where
-    name = reverse . takeWhile (/= '/') . reverse . takeWhile (/= '.') $ filePath
+    name           = reverse . takeWhile (/= '/') . reverse . takeWhile (/= '.') $ filePath
+
+    configFilePath = filePath ++ "-format"
 
 goldenTest :: String -> String -> Spec
 goldenTest name input = it ("formats " ++ name) $ do

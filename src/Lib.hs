@@ -2,10 +2,14 @@ module Lib
   ( FormatError(..)
   , FormatOptions(..)
   , FormatStyle(..)
+  , AlignStyle(..)
   , defaultOptions
   , setIndentWidth
   , setInlineMaxWidth
   , setDefaultStyle
+  , setDefaultAlign
+  , setAlignRule
+  , removeAlignRule
   , setPreserveBlankLines
   , setSpecialInlineHead
   , removeSpecialInlineHead
@@ -20,7 +24,10 @@ import           Config    ( defaultOptions
                            , readFormatOptions
                            , readFormatOptionsFromFile
                            , readFormatOptionsFromPath
+                           , removeAlignRule
                            , removeSpecialInlineHead
+                           , setAlignRule
+                           , setDefaultAlign
                            , setDefaultStyle
                            , setIndentWidth
                            , setInlineMaxWidth
@@ -35,7 +42,7 @@ import           Formatter ( renderProgram )
 
 import           Parser    ( parseProgram )
 
-import           Types     ( FormatError(..), FormatOptions, FormatStyle(..) )
+import           Types     ( AlignStyle(..), FormatError(..), FormatOptions, FormatStyle(..) )
 
 -- | Public API for formatting strict 'Text'.
 formatLispText :: FormatOptions -> Text -> Either FormatError Text

@@ -5,7 +5,9 @@ module Types
   ( FormatError(..)
   , FormatOptions(..)
   , FormatStyle(..)
+  , AlignStyle(..)
   , Special(..)
+  , AlignRule(..)
   , QuoteKind(..)
   , DelimiterType(..)
   , SExpr(..)
@@ -22,11 +24,17 @@ import           GHC.Generics ( Generic )
 newtype FormatError = ParseError String
   deriving ( Eq, Show )
 
+-- | Alignment style for arguments.
+data AlignStyle
+  = Normal  -- ^ Normal indentation
+  | Align   -- ^ Align with the beginning of the last inlined argument
+  deriving ( Eq, Show, Generic )
+
+instance FromDhall AlignStyle
+
 -- | Formatting style for special forms.
 data FormatStyle
-  = InlineHead !Int          -- ^ Inline first N arguments, then force newlines for rest (no line width check for rest)
-  | InlineHeadOneline !Int   -- ^ Try inline all first, if fails try inline first N arguments
-  | InlineAlign !Int         -- ^ Inline first N arguments (unless exceed line width), rest align with last inlined
+  = InlineHead !Int          -- ^ Inline first N arguments, then force newlines for rest
   | NewlineAlign !Int        -- ^ Always newline and indent by N
   | TryInline                -- ^ Try inline all unless line width not enough
   deriving ( Eq, Show, Generic )
@@ -39,13 +47,20 @@ data Special = Special { atom :: !Text, style :: !FormatStyle }
 
 instance FromDhall Special
 
+data AlignRule = AlignRule { alignAtom :: !Text, alignStyle :: !AlignStyle }
+  deriving ( Eq, Show, Generic )
+
+instance FromDhall AlignRule
+
 data FormatOptions
   = FormatOptions
-  { indentWidth        :: !Int
-  , inlineMaxWidth     :: !Int
-  , defaultStyle       :: !FormatStyle  -- default formatting for atoms not in specials
-  , specials           :: ![ Special ]  -- dedicated type for inline head rules
-  , preserveBlankLines :: !Bool         -- whether to preserve blank lines in source code
+  { indentWidth :: !Int
+  , inlineMaxWidth :: !Int
+  , defaultStyle :: !FormatStyle   -- default formatting for atoms not in specials
+  , defaultAlign :: !AlignStyle    -- default alignment style
+  , specials :: ![ Special ]   -- dedicated type for inline head rules
+  , aligns :: ![ AlignRule ] -- alignment rules for specific atoms
+  , preserveBlankLines :: !Bool          -- whether to preserve blank lines in source code
   }
   deriving ( Eq, Show, Generic )
 

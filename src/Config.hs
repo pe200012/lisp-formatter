@@ -7,6 +7,9 @@ module Config
   , setIndentWidth
   , setInlineMaxWidth
   , setDefaultStyle
+  , setDefaultAlign
+  , setAlignRule
+  , removeAlignRule
   , setPreserveBlankLines
   , setSpecialInlineHead
   , removeSpecialInlineHead
@@ -22,28 +25,34 @@ import qualified Data.Text         as T
 import           Dhall             ( auto, input )
 
 import           System.Directory  ( doesFileExist, getCurrentDirectory, getHomeDirectory )
-import           System.FilePath   ( (</>), takeDirectory )
+import           System.FilePath   ( (</>), isAbsolute, takeDirectory )
 import           System.IO         ( hPutStrLn, stderr )
 
-import           Types             ( FormatOptions(..), FormatStyle(..), Special(..) )
+import           Types             ( AlignRule(..)
+                                   , AlignStyle(..)
+                                   , FormatOptions(..)
+                                   , FormatStyle(..)
+                                   , Special(..)
+                                   )
 
 -- | Default formatter options.
 defaultOptions :: FormatOptions
 defaultOptions
   = FormatOptions
-  { indentWidth        = 2
-  , inlineMaxWidth     = 80
-  , defaultStyle       = InlineHeadOneline 1
-  , specials
-      = [ Special { atom = "if", style = InlineHeadOneline 1 }
-        , Special { atom = "cond", style = InlineHeadOneline 1 }
-        , Special { atom = "define", style = InlineHeadOneline 2 }
-        , Special { atom = "let", style = InlineHeadOneline 1 }
-        , Special { atom = "lambda", style = InlineHeadOneline 1 }
-        , Special { atom = "defn", style = InlineHeadOneline 2 }
-        , Special { atom = "defmacro", style = InlineHeadOneline 2 }
-        , Special { atom = "do", style = NewlineAlign 0 }
-        ]
+  { indentWidth = 2
+  , inlineMaxWidth = 80
+  , defaultStyle = TryInline
+  , defaultAlign = Normal
+  , specials = [ Special { atom = "if", style = InlineHead 1 }
+               , Special { atom = "cond", style = InlineHead 1 }
+               , Special { atom = "define", style = InlineHead 2 }
+               , Special { atom = "let", style = InlineHead 1 }
+               , Special { atom = "lambda", style = InlineHead 1 }
+               , Special { atom = "defn", style = TryInline }
+               , Special { atom = "defmacro", style = InlineHead 2 }
+               , Special { atom = "do", style = NewlineAlign 0 }
+               ]
+  , aligns = [ AlignRule { alignAtom = "if", alignStyle = Align } ]
   , preserveBlankLines = True
   }
 
@@ -63,6 +72,21 @@ setDefaultStyle formatStyle opts = opts { defaultStyle = formatStyle }
 setPreserveBlankLines :: Bool -> FormatOptions -> FormatOptions
 setPreserveBlankLines preserve opts = opts { preserveBlankLines = preserve }
 
+-- | Set the default align style.
+setDefaultAlign :: AlignStyle -> FormatOptions -> FormatOptions
+setDefaultAlign align opts = opts { defaultAlign = align }
+
+-- | Add or update an align rule for a specific atom.
+setAlignRule :: Text -> AlignStyle -> FormatOptions -> FormatOptions
+setAlignRule atomName align opts
+  = opts { aligns = AlignRule { alignAtom = atomName, alignStyle = align }
+             : filter ((/= atomName) . alignAtom) (aligns opts)
+         }
+
+-- | Remove an align rule for a specific atom.
+removeAlignRule :: Text -> FormatOptions -> FormatOptions
+removeAlignRule atomName opts = opts { aligns = filter ((/= atomName) . alignAtom) (aligns opts) }
+
 -- | Add or update a special inline head rule.
 setSpecialInlineHead :: Text -> FormatStyle -> FormatOptions -> FormatOptions
 setSpecialInlineHead atomName formatStyle opts
@@ -78,7 +102,12 @@ removeSpecialInlineHead atomName opts
 -- | Read FormatOptions from a Dhall file. Returns default options if file doesn't exist or fails to parse.
 readFormatOptionsFromFile :: FilePath -> IO FormatOptions
 readFormatOptionsFromFile path = do
-  result <- E.try (input auto (T.pack path)) :: IO (Either SomeException FormatOptions)
+  -- Normalize path for Dhall: relative paths need ./ prefix to avoid being interpreted as variables
+  let normalizedPath
+        = if isAbsolute path
+          then path
+          else "./" ++ path
+  result <- E.try (input auto (T.pack normalizedPath)) :: IO (Either SomeException FormatOptions)
   case result of
     Left err   -> do
       hPutStrLn stderr
