@@ -34,7 +34,17 @@ import           Types      ( AlignRule(..)
 -- Main formatting functions
 
 renderProgram :: FormatOptions -> [ Node ] -> Text
-renderProgram opts nodes = T.intercalate "\n" $ map rlText $ concatMap (formatNode opts 0) nodes
+renderProgram opts nodes = T.intercalate "\n" $ concat $ addSeparators formattedNodes
+  where
+    -- Format each node to its text lines
+    formattedNodes = map (\node -> ( node, map rlText $ formatNode opts 0 node )) nodes
+
+    -- Group consecutive formatted outputs, inserting empty lines between top-level expressions
+    addSeparators [] = []
+    addSeparators [ ( _, nodeLines ) ] = [ nodeLines ]
+    addSeparators (( node1, lines1 ) : ( node2, lines2 ) : rest) = case ( node1, node2 ) of
+      ( NodeExpr _, NodeExpr _ ) -> lines1 : [ "" ] : addSeparators (( node2, lines2 ) : rest)
+      _ -> lines1 : addSeparators (( node2, lines2 ) : rest)
 
 formatNode :: FormatOptions -> Int -> Node -> [ RenderLine ]
 formatNode opts level = \case
