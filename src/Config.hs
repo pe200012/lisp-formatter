@@ -21,7 +21,7 @@ import qualified Data.Text         as T
 
 import           Dhall             ( auto, input )
 
-import           System.Directory  ( doesFileExist, getHomeDirectory )
+import           System.Directory  ( doesFileExist, getCurrentDirectory, getHomeDirectory )
 import           System.FilePath   ( (</>), takeDirectory )
 import           System.IO         ( hPutStrLn, stderr )
 
@@ -78,7 +78,7 @@ removeSpecialInlineHead atomName opts
 -- | Read FormatOptions from a Dhall file. Returns default options if file doesn't exist or fails to parse.
 readFormatOptionsFromFile :: FilePath -> IO FormatOptions
 readFormatOptionsFromFile path = do
-  result <- E.try (input auto (T.pack ("./" ++ path))) :: IO (Either SomeException FormatOptions)
+  result <- E.try (input auto (T.pack path)) :: IO (Either SomeException FormatOptions)
   case result of
     Left err   -> do
       hPutStrLn stderr
@@ -110,16 +110,20 @@ findConfigFile = do
 
 -- | Search for config file starting from current directory up to root.
 findConfigInHierarchy :: FilePath -> IO (Maybe FilePath)
-findConfigInHierarchy configName = go "."
+findConfigInHierarchy configName = do
+  cwd <- getCurrentDirectory
+  go cwd
   where
     go dir = do
       let configPath = dir </> configName
       exists <- doesFileExist configPath
       if exists
         then pure (Just configPath)
-        else if dir == "/"
-          then pure Nothing
-          else go (takeDirectory dir)
+        else do
+          let parent = takeDirectory dir
+          if parent == dir  -- reached root (takeDirectory "/" = "/")
+            then pure Nothing
+            else go parent
 
 -- | Read FormatOptions from a specific config file path, or search for it if Nothing.
 readFormatOptionsFromPath :: Maybe FilePath -> IO FormatOptions

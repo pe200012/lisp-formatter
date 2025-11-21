@@ -95,13 +95,17 @@ parseList
 parseDelimitedList :: Char -> Char -> DelimiterType -> Parser SExpr
 parseDelimitedList open close delim = do
   _ <- char open
-  nodes <- manyTill parseNodeInList (Text.Megaparsec.try (skipSpace *> char close))
+  nodes <- concat <$> manyTill parseNodeInList (Text.Megaparsec.try (skipSpace *> char close))
   pure $ List delim nodes
 
-parseNodeInList :: Parser Node
+parseNodeInList :: Parser [ Node ]
 parseNodeInList = do
-  skipSpace
-  parseComment <|> NodeExpr <$> parseExpr
+  skipNonNewlineSpace
+  newlines <- countNewlines
+  node <- parseComment <|> NodeExpr <$> parseExpr
+  if newlines > 1
+    then pure (replicate (newlines - 1) NodeBlankLine ++ [ node ])
+    else pure [ node ]
 
 parseComment :: Parser Node
 parseComment = do

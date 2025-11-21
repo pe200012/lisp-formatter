@@ -75,9 +75,8 @@ runFormatter cli = do
   let baseOpts = case ( cliIndent cli, cliInlineWidth cli ) of
         ( Nothing, Nothing ) -> dhallOpts  -- Use Dhall options if no CLI options provided
         _ -> defaultOptions  -- Start with defaults if any CLI option provided
-  let optsWithIndent = maybe baseOpts (\i -> setIndentWidth i baseOpts) (cliIndent cli)
-  let finalOpts
-        = maybe optsWithIndent (\w -> setInlineMaxWidth w optsWithIndent) (cliInlineWidth cli)
+  let optsWithIndent = maybe baseOpts (`setIndentWidth` baseOpts) (cliIndent cli)
+  let finalOpts = maybe optsWithIndent (`setInlineMaxWidth` optsWithIndent) (cliInlineWidth cli)
   input <- readInput (cliInputPath cli)
   case formatLispText finalOpts input of
     Left err     -> die ("Failed to format input: " ++ show err)
