@@ -75,30 +75,11 @@ formatList opts level delim nodes = case nodes of
       -> finalize (lineHead : formatRestAligned alignCol restNodes) nodes
     | Just ( lineHead, restNodes ) <- renderSpecialInlineHead opts level delim nodes
       -> finalize (lineHead : formatRest restNodes) nodes
+    | Just result <- tryDefaultStyle -> result
     | Just inline <- renderInlineSimple opts level delim nodes -> [ RenderLine inline KindExpr ]
     | Just ( lineHead, restNodes ) <- renderInlineHead opts level delim nodes
       -> finalize (lineHead : formatRest restNodes) nodes
-    | otherwise -> case nodes of
-      (NodeExpr (Atom atomName) : args) -> case defaultStyle opts of
-        InlineHead n   -> maybe
-          (finalize (baseLine : body) nodes)
-          (\( lh, rest, mbAlignCol ) -> case mbAlignCol of
-             Just alignCol -> finalize (lh : formatRestAligned alignCol rest) nodes
-             Nothing       -> finalize (lh : formatRest rest) nodes)
-          (renderInlineHeadStyleWithAlign opts level delim atomName args n)
-        BindingsHead n -> maybe
-          (finalize (baseLine : body) nodes)
-          (\( lh, rest ) -> finalize (lh : formatRest rest) nodes)
-          (renderBindingsHeadStyle opts level delim atomName args n)
-        Newline        -> maybe
-          (finalize (baseLine : body) nodes)
-          (\( lh, rest ) -> finalize (lh : formatRest rest) nodes)
-          (renderNewlineAlignStyle opts level delim atomName args)
-        TryInline      -> maybe
-          (finalize (baseLine : body) nodes)
-          (\( lh, rest ) -> finalize (lh : formatRest rest) nodes)
-          (renderTryInlineStyle opts level delim atomName args)
-      _ -> finalize (baseLine : body) nodes
+    | otherwise -> finalize (baseLine : body) nodes
   where
     indentCur = indentText opts level
 
@@ -148,6 +129,23 @@ formatList opts level delim nodes = case nodes of
         then ls ++ [ RenderLine (indentCur <> closeDelim) KindExpr ]
         else attachClosing ls closeDelim
 
+    tryDefaultStyle :: Maybe [ RenderLine ]
+    tryDefaultStyle = case nodes of
+      (NodeExpr (Atom atomName) : args) -> if null args
+        then Nothing
+        else case defaultStyle opts of
+          InlineHead n   -> renderInlineHeadStyleWithAlign opts level delim atomName args n
+            >>= \( lh, rest, mbAlignCol ) -> case mbAlignCol of
+              Just alignCol -> Just (finalize (lh : formatRestAligned alignCol rest) nodes)
+              Nothing       -> Just (finalize (lh : formatRest rest) nodes)
+          BindingsHead n -> renderBindingsHeadStyle opts level delim atomName args n
+            >>= \( lh, rest ) -> Just (finalize (lh : formatRest rest) nodes)
+          Newline        -> renderNewlineAlignStyle opts level delim atomName args
+            >>= \( lh, rest ) -> Just (finalize (lh : formatRest rest) nodes)
+          TryInline      -> renderTryInlineStyle opts level delim atomName args >>= \( lh, rest )
+            -> Just (finalize (lh : formatRest rest) nodes)
+      _ -> Nothing
+
     renderInlineSimple o lvl d ns = do
       inline <- renderCompactListSimple o d ns
       let lineText = indentText o lvl <> inline
@@ -196,13 +194,18 @@ formatList opts level delim nodes = case nodes of
     renderInlineHeadStyleWithAlign o lvl _ atomName args inlineCount = do
       let ( inlineArgs, restArgs ) = splitAt inlineCount args
       inlineParts <- traverse (renderCompactNode o) inlineArgs
-      let atomText
-            = indentText o lvl <> openDelim <> atomName <> " " <> T.intercalate " " inlineParts
+      let inlineText = T.intercalate " " inlineParts
+          hasSpace   = not (T.null inlineText)
+          spaceStr
+            = if hasSpace
+              then " "
+              else ""
+          atomText   = indentText o lvl <> openDelim <> atomName <> spaceStr <> inlineText
       if T.length atomText <= inlineMaxWidth o
         then case findAlignStyle atomName of
           Align  -> do
             -- Calculate where the last inlined argument starts
-            let atomAndPrefix    = indentText o lvl <> openDelim <> atomName <> " "
+            let atomAndPrefix    = indentText o lvl <> openDelim <> atomName <> spaceStr
                 allButLastInline = take (length inlineParts - 1) inlineParts
                 beforeLastLength
                   = if null allButLastInline
