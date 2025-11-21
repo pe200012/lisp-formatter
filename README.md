@@ -1,141 +1,193 @@
 # lisp-formatter
 
-A general-purpose code formatter for Lisp-like languages, written in Haskell.
+A small, focused formatter for Lisp-like languages. Produces consistent, readable output with configurable indentation and inline limits.
 
-## Features
+## Quick start
 
-- **Parser**: Parses S-expressions with support for:
-  - Atoms, strings, and lists
-  - Multiple delimiter types: `()`, `[]`, `{}`
-  - Comments (`;` style)
-  - Quote notation (`'`, `` ` ``, `,`, `,@`)
-  - Nested structures
-  - Unicode support
-
-- **Formatter**: Intelligently formats code with:
-  - Configurable indentation width
-  - Configurable line width for inline forms
-  - Automatic multi-line breaking for long expressions
-  - Comment preservation
-  - Compact inline rendering when possible
-
-## Installation
+Build and run the formatter with Stack:
 
 ```bash
 stack build
-stack install
+stack exec lisp-format -- --help
+```
+
+Format from stdin to stdout:
+
+```bash
+echo '(define (factorial n) (if (= n 0) 1 (* n (factorial (- n 1)))))' | lisp-format
+```
+
+Format a file in place (write to stdout or a file):
+
+```bash
+lisp-format --in input.lisp --out output.lisp
+# or
+lisp-format --in input.lisp --out -  # write to stdout
+```
+
+## Installation
+
+Using Stack:
+
+```bash
+stack build
+stack install  # optional: install the binary to ~/.local/bin
 ```
 
 ## Usage
 
-### Command Line
+Command-line options of interest:
 
-```bash
-# Format from stdin to stdout
-echo '(defun factorial (n) (if (= n 0) 1 (* n (factorial (- n 1)))))' | lisp-formatter
+- `--indent N` or `-i N` — set indentation width (default: 2)
+- `--inline-width N` or `-w N` — maximum width for keeping a form on a single line (default: 80)
+- `--config FILE` or `-c FILE` — explicitly load configuration from `FILE`
+- `--in FILE` — read input from `FILE` (`-` reads stdin)
+- `--out FILE` or `-o FILE` — write output to `FILE` (`-` writes stdout)
 
-# Format a file
-lisp-formatter --in input.lisp --out output.lisp
+Examples
 
-# Use custom indentation (default: 2 spaces)
-lisp-formatter --indent 4 < input.lisp
+Inline formatting when the form fits the configured width:
 
-# Use custom line width (default: 80 characters)
-lisp-formatter --inline-width 100 < input.lisp
-
-# Show help
-lisp-formatter --help
+```lisp
+(define (add x y) (+ x y))
 ```
 
-### Library
+Long forms are broken onto multiple lines with readable indentation:
+
+```lisp
+(some-long-function
+  (arg1 arg2 arg3)
+  (arg4 arg5))
+```
+
+## Format styles
+
+The formatter supports a small set of layout styles that control how a list (a head followed by arguments) is rendered. These styles are used as the `defaultStyle` and can be applied to specific head atoms using the `specials` list in the Dhall configuration.
+
+- InlineHead N
+
+  Inline the head and the first N arguments, then place the remaining arguments on their own lines.
+  This is useful for forms where a small number of leading arguments should stay with the head, and the remainder is structured vertically.
+
+  Example (with N = 2):
+
+```lisp
+(foo a b
+  c
+  d)
+```
+
+- InlineHeadOneline N
+
+  First, try to keep the whole form on a single line. If it doesn't fit, fall back to inlining the head with the first N arguments and break the rest across lines.
+  This balances compact output with readable breaks when the form grows.
+
+```lisp
+; if it fits
+(foo a b c)
+
+; otherwise
+(foo a
+  b
+  c)
+```
+
+- InlineAlign N
+
+  Inline the head and the first N arguments when possible. The remaining arguments are printed on following lines aligned under the last inlined argument.
+  Handy for column-like alignment where the first block acts as a tabstop.
+
+```lisp
+(foo a b c)
+
+; If the inline part is longer and the form is broken, it looks like:
+(foo a
+     b
+     c)
+```
+
+- NewlineAlign N
+  Always break after the head and indent the subsequent lines by additional N spaces.
+  Use this for forms that should always be vertical for readability.
+
+```lisp
+(foo
+  a
+  b
+  c)
+```
+
+- TryInline
+  Try to render the entire form on a single line. If it exceeds the configured `inlineMaxWidth`, fall back to a multi-line representation determined by other rules.
+
+When customizing formatting for particular forms, add `Special` entries in the `specials` list. Each `Special` maps an atom (the head) to a `FormatStyle`.
+
+## Configuration
+
+lisp-formatter reads configuration via Dhall. The formatter searches for a config file in this order (unless you pass `--config`):
+
+1. Look for a file named `.lisp-format` in the current working directory and then each parent directory, up to the filesystem root.
+2. If not found, look for `.lisp-format` in the user home directory.
+3. If no configuration file is found or the file cannot be parsed, the built-in defaults are used.
+
+You can override this search using `--config /path/to/yourconfig`.
+
+Minimal example configuration (Dhall):
+
+```dhall
+let Style =
+      < InlineHead : Integer
+      | InlineHeadOneline : Integer
+      | InlineAlign : Integer
+      | NewlineAlign : Integer
+      | TryInline
+      >
+
+in { indentWidth = +2
+   , inlineMaxWidth = +80
+   , defaultStyle = Style.InlineHeadOneline +1
+   , specials = [] : List { atom : Text, style : Style }
+   , preserveBlankLines = True
+   }
+```
+
+Fields
+- `indentWidth`: number of spaces used for each indentation level.
+- `inlineMaxWidth`: maximum line width for keeping a list on one line.
+- `defaultStyle`: default layout choice for unknown forms.
+- `specials`: list of special-case rules for particular head atoms.
+- `preserveBlankLines`: when `True` blank lines are preserved; when `False` the formatter normalizes whitespace.
+
+## Library use
+
+A small API is exposed for programmatic use. Example:
 
 ```haskell
 import Lib
 import qualified Data.Text as T
 
-main :: IO ()
-main = do
-    let code = "(defun hello (name) (print name))"
-    case formatLispText defaultOptions (T.pack code) of
-        Left err -> print err
-        Right formatted -> T.putStrLn formatted
+main = case formatLispText defaultOptions (T.pack "(foo bar)") of
+  Left err -> print err
+  Right out -> T.putStrLn out
 ```
 
-## Options
-
-- `--indent N` or `-i N`: Number of spaces for indentation (default: 2)
-- `--inline-width N` or `-w N`: Maximum width for single-line forms (default: 80)
-- `--in FILE`: Read from FILE instead of stdin
-- `--out FILE` or `-o FILE`: Write to FILE instead of stdout
-- `--help` or `-h`: Show help message
-
-## Examples
-
-### Input
-```lisp
-(define (factorial n)(if(= n 0)1(* n(factorial(- n 1)))))
-```
-
-### Output
-```lisp
-(define (factorial n) (if (= n 0) 1 (* n (factorial (- n 1)))))
-```
-
-### Input (long expression)
-```lisp
-(some-really-quite-extraordinarily-long-function-name (first-argument second-argument third-argument fourth-argument fifth-argument sixth-argument))
-```
-
-### Output
-```lisp
-(some-really-quite-extraordinarily-long-function-name
-  (first-argument second-argument third-argument fourth-argument fifth-argument sixth-argument))
-```
+You can load configuration from Dhall using the library helpers (`readFormatOptionsFromPath` / `readFormatOptionsFromFile`).
 
 ## Development
 
+Run the test suite and build locally with Stack:
+
 ```bash
-# Build
 stack build
-
-# Run tests
 stack test
-
-# Run with profiling
-stack build --profile
-stack exec --profile -- lisp-formatter-exe +RTS -p
 ```
 
-## Supported Lisp Dialects
+If you want to debug or profile, use the Stack profiling flags as usual.
 
-The formatter is designed to be general-purpose and should work with:
-- **Scheme**: Traditional Lisp with parentheses
-- **Common Lisp**: Full support for parentheses-based syntax
-- **Racket**: Scheme-family language
-- **Clojure**: Full support including vectors `[]`, maps `{}`, and sets `#{}`
-- **Emacs Lisp**: Traditional parentheses-based Lisp
-- Any other Lisp-like language with S-expression syntax
+## Contributing
 
-### Clojure Support
-
-The formatter fully supports Clojure's additional delimiter types:
-```clojure
-; Vectors
-[1 2 3]
-
-; Maps
-{:name "Alice" :age 30}
-
-; Function with vector parameters
-(defn add [a b]
-  (+ a b))
-
-; Let bindings
-(let [x 10
-      y 20]
-  (+ x y))
-```
+Contributions are welcome. Open an issue first to discuss larger changes. Small fixes and improvements can be submitted as pull requests. Keep changes focused and include tests when appropriate.
 
 ## License
 
-BSD-3-Clause (see LICENSE file)
+This project is released under the BSD-3-Clause license. See the `LICENSE` file for details.
