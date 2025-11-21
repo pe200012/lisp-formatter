@@ -28,6 +28,7 @@ import           Text.Megaparsec      ( Parsec
                                       , anySingle
                                       , choice
                                       , eof
+                                      , getOffset
                                       , many
                                       , manyTill
                                       , runParser
@@ -55,21 +56,38 @@ parseProgram input = case runParser parser "lisp" input of
   where
     parser = do
       skipNonNewlineSpace
-      nodes <- many (Text.Megaparsec.try parseTopLevelNode)
+      nodes <- many (Text.Megaparsec.try (parseTopLevelNode input))
       trailingNewlines <- countNewlines
       skipNonNewlineSpace
       eof
       let allNodes = concat nodes
       pure $ allNodes ++ replicate (trailingNewlines - 1) NodeBlankLine
 
-parseTopLevelNode :: Parser [ Node ]
-parseTopLevelNode = do
+parseTopLevelNode :: Text -> Parser [ Node ]
+parseTopLevelNode fullInput = do
   skipNonNewlineSpace
   newlines <- countNewlines
   node <- parseComment <|> NodeExpr <$> parseExpr
-  if newlines > 1
-    then pure (replicate (newlines - 1) NodeBlankLine ++ [ node ])
-    else pure [ node ]
+
+  -- Check if this is a skip directive comment
+  let isSkip = case node of
+        NodeComment txt -> "lisp-format skip" `T.isInfixOf` txt
+        _ -> False
+
+  -- If skip directive, mark the next expression to preserve raw text
+  nextNode <- if isSkip
+    then do
+      skipNonNewlineSpace
+      _ <- countNewlines
+      nextStartPos <- Text.Megaparsec.getOffset
+      nextExpr <- Text.Megaparsec.try parseExpr
+      nextEndPos <- Text.Megaparsec.getOffset
+      let rawText = T.take (nextEndPos - nextStartPos) $ T.drop nextStartPos fullInput
+      pure [ NodeExprRaw nextExpr rawText ]
+    else pure []
+
+  let blankLines = replicate (newlines - 1) NodeBlankLine
+  pure $ blankLines ++ [ node ] ++ nextNode
 
 countNewlines :: Parser Int
 countNewlines = do

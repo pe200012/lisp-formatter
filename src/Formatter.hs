@@ -48,9 +48,10 @@ renderProgram opts nodes = T.intercalate "\n" $ concat $ addSeparators formatted
 
 formatNode :: FormatOptions -> Int -> Node -> [ RenderLine ]
 formatNode opts level = \case
-  NodeComment txt -> [ RenderLine (indentText opts level <> ";" <> txt) KindComment ]
-  NodeExpr expr   -> formatExpr opts level expr
-  NodeBlankLine   -> ([ RenderLine "" KindBlankLine | preserveBlankLines opts ])
+  NodeComment txt       -> [ RenderLine (indentText opts level <> ";" <> txt) KindComment ]
+  NodeExpr expr         -> formatExpr opts level expr
+  NodeExprRaw _ rawText -> [ RenderLine rawText KindExpr ]  -- Output raw text for skipped nodes
+  NodeBlankLine         -> ([ RenderLine "" KindBlankLine | preserveBlankLines opts ])
 
 formatExpr :: FormatOptions -> Int -> SExpr -> [ RenderLine ]
 formatExpr opts level = \case
@@ -116,7 +117,7 @@ formatList opts level delim nodes = case nodes of
         -- Calculate the level that corresponds to alignCol
         alignLevel = alignCol `div` max 1 (indentWidth opts)
 
-        formatAligned (NodeExpr expr)   = case renderCompactExpr opts expr of
+        formatAligned (NodeExpr expr)         = case renderCompactExpr opts expr of
           Just compact -> [ RenderLine (alignIndent <> compact) KindExpr ]
           Nothing      ->
             -- For non-compact expressions, format at the alignment level
@@ -137,8 +138,10 @@ formatList opts level delim nodes = case nodes of
                                     }
                     in 
                       adjusted : rest
-        formatAligned (NodeComment txt) = [ RenderLine (alignIndent <> ";" <> txt) KindComment ]
-        formatAligned NodeBlankLine     = []  -- Blank lines don't make sense in aligned context
+        formatAligned (NodeExprRaw _ rawText) = [ RenderLine rawText KindExpr ]  -- Output raw text
+        formatAligned (NodeComment txt)
+          = [ RenderLine (alignIndent <> ";" <> txt) KindComment ]
+        formatAligned NodeBlankLine           = []  -- Blank lines don't make sense in aligned context
 
     finalize ls ns
       = if isLastComment ns
@@ -284,9 +287,10 @@ formatList opts level delim nodes = case nodes of
         then Just ( RenderLine atomText KindExpr, [] )
         else Nothing  -- Fall back to regular formatting
 
-    renderCompactNode o (NodeExpr expr) = renderCompactExpr o expr
-    renderCompactNode _ (NodeComment _) = Nothing
-    renderCompactNode _ NodeBlankLine   = Nothing
+    renderCompactNode o (NodeExpr expr)   = renderCompactExpr o expr
+    renderCompactNode _ (NodeExprRaw _ _) = Nothing  -- Cannot compact skipped nodes
+    renderCompactNode _ (NodeComment _)   = Nothing
+    renderCompactNode _ NodeBlankLine     = Nothing
 
 --------------------------------------------------------------------------------
 -- Helper data types and functions
@@ -379,9 +383,10 @@ compactList opts delim nodes = do
   let ( open, close ) = delimiterPair delim
   Just $ open <> T.intercalate " " parts <> close
   where
-    renderNode (NodeExpr e)   = renderCompactExpr opts e
-    renderNode NodeComment {} = Nothing
-    renderNode NodeBlankLine  = Nothing
+    renderNode (NodeExpr e)      = renderCompactExpr opts e
+    renderNode (NodeExprRaw _ _) = Nothing  -- Cannot compact skipped nodes
+    renderNode NodeComment {}    = Nothing
+    renderNode NodeBlankLine     = Nothing
 
 quotePrefix :: QuoteKind -> Text
 quotePrefix = \case
