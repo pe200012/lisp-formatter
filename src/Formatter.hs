@@ -79,17 +79,21 @@ formatList opts level delim nodes = case nodes of
       -> finalize (lineHead : formatRest restNodes) nodes
     | otherwise -> case nodes of
       (NodeExpr (Atom atomName) : args) -> case defaultStyle opts of
-        InlineHead n -> maybe
+        InlineHead n   -> maybe
           (finalize (baseLine : body) nodes)
           (\( lh, rest, mbAlignCol ) -> case mbAlignCol of
              Just alignCol -> finalize (lh : formatRestAligned alignCol rest) nodes
              Nothing       -> finalize (lh : formatRest rest) nodes)
           (renderInlineHeadStyleWithAlign opts level delim atomName args n)
-        Newline      -> maybe
+        BindingsHead n -> maybe
+          (finalize (baseLine : body) nodes)
+          (\( lh, rest ) -> finalize (lh : formatRest rest) nodes)
+          (renderBindingsHeadStyle opts level delim atomName args n)
+        Newline        -> maybe
           (finalize (baseLine : body) nodes)
           (\( lh, rest ) -> finalize (lh : formatRest rest) nodes)
           (renderNewlineAlignStyle opts level delim atomName args)
-        TryInline    -> maybe
+        TryInline      -> maybe
           (finalize (baseLine : body) nodes)
           (\( lh, rest ) -> finalize (lh : formatRest rest) nodes)
           (renderTryInlineStyle opts level delim atomName args)
@@ -138,22 +142,24 @@ formatList opts level delim nodes = case nodes of
     renderSpecialInlineAlign o lvl d (NodeExpr (Atom atomName) : args) = do
       headRule <- find ((== atomName) . atom) (specials o)
       case style headRule of
-        InlineHead n -> do
+        InlineHead n   -> do
           ( lh, rest, mbAlignCol ) <- renderInlineHeadStyleWithAlign o lvl d atomName args n
           alignCol <- mbAlignCol
           Just ( lh, rest, alignCol )
-        Newline      -> Nothing
-        TryInline    -> Nothing
+        BindingsHead _ -> Nothing
+        Newline        -> Nothing
+        TryInline      -> Nothing
     renderSpecialInlineAlign _ _ _ _ = Nothing
 
     renderSpecialInlineHead o lvl d (NodeExpr (Atom atomName) : args) = do
       headRule <- find ((== atomName) . atom) (specials o)
       case style headRule of
-        InlineHead n -> do
+        InlineHead n   -> do
           ( lh, rest, _ ) <- renderInlineHeadStyleWithAlign o lvl d atomName args n
           Just ( lh, rest )
-        Newline      -> renderNewlineAlignStyle o lvl d atomName args
-        TryInline    -> renderTryInlineStyle o lvl d atomName args
+        BindingsHead n -> renderBindingsHeadStyle o lvl d atomName args n
+        Newline        -> renderNewlineAlignStyle o lvl d atomName args
+        TryInline      -> renderTryInlineStyle o lvl d atomName args
     renderSpecialInlineHead _ _ _ _ = Nothing
 
     -- Helper to find align style for an atom
@@ -188,6 +194,66 @@ formatList opts level delim nodes = case nodes of
           firstLine = RenderLine (indentText o lvl <> openDelim <> atomName) KindExpr
         in 
           Just ( firstLine, args )  -- Always format with newline
+
+    renderBindingsHeadStyle opt lev outerDelim atomName args bindingsCount = do
+      let ( bindingArgs, restArgs ) = splitAt bindingsCount args
+      case bindingArgs of
+        [ NodeExpr (List bindingDelim bindingNodes) ] -> do
+          -- Prepare binding block and body lines
+          let ( outerOpen, _ )  = delimiterPair outerDelim
+              bodyLines         = concatMap (formatNode opt (lev + 1)) restArgs
+              bindingPrefix     = indentText opt lev <> outerOpen <> atomName <> " "
+              bindingIndentCols
+                = T.length bindingPrefix + T.length (fst (delimiterPair bindingDelim))
+              bindingLines
+                = formatBindingsList opt bindingDelim bindingNodes bindingIndentCols
+              lineGroups        = case bindingLines of
+                [] -> [ bindingPrefix
+                        <> fst (delimiterPair bindingDelim)
+                        <> snd (delimiterPair bindingDelim)
+                      ]
+                (firstBindingLine : restBindingLines) -> (bindingPrefix <> firstBindingLine)
+                  : restBindingLines
+              allLines          = lineGroups ++ map rlText bodyLines
+              fullText          = T.intercalate "\n" allLines
+          Just ( RenderLine fullText KindExpr, [] )
+        _ -> Nothing
+
+    formatBindingsList :: FormatOptions -> DelimiterType -> [ Node ] -> Int -> [ Text ]
+    formatBindingsList opt delimType bindingNodes indentCols
+      = let
+          ( openDel, closeDel ) = delimiterPair delimType
+          pairs = case bindingNodes of
+            [] -> []
+            _  -> map (formatBindingPair opt) (groupIntoPairs bindingNodes)
+          appendClosing :: [ Text ] -> [ Text ]
+          appendClosing = \case
+            [] -> []
+            [ single ] -> [ single <> closeDel ]
+            (line : rest) -> line : appendClosing rest
+        in 
+          case pairs of
+            [] -> [ openDel <> closeDel ]
+            (firstPair : restPairs) -> let
+                firstLine = openDel <> firstPair
+                spacing   = T.replicate indentCols " "
+                restLines = case restPairs of
+                  [] -> []
+                  xs -> map (spacing <>) xs
+              in 
+                appendClosing (firstLine : restLines)
+
+    groupIntoPairs :: [ a ] -> [ [ a ] ]
+    groupIntoPairs [] = []
+    groupIntoPairs (x : y : rest) = [ x, y ] : groupIntoPairs rest
+    groupIntoPairs [ x ] = [ [ x ] ]
+
+    formatBindingPair :: FormatOptions -> [ Node ] -> Text
+    formatBindingPair opt nodeList = T.intercalate " " $ map (formatNodeForBinding opt) nodeList
+
+    formatNodeForBinding :: FormatOptions -> Node -> Text
+    formatNodeForBinding _ (NodeExpr expr) = fromMaybe "" (renderCompactExpr expr)
+    formatNodeForBinding _ _ = ""
 
     renderTryInlineStyle o lvl _ atomName args = do
       inlineParts <- traverse renderCompactNode args
