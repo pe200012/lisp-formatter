@@ -6,19 +6,25 @@ module Lib
   , setIndentWidth
   , setInlineMaxWidth
   , setDefaultStyle
+  , setPreserveBlankLines
   , setSpecialInlineHead
   , removeSpecialInlineHead
   , readFormatOptionsFromFile
+  , readFormatOptions
+  , readFormatOptionsFromPath
   , formatLispText
   , formatLisp
   ) where
 
 import           Config    ( defaultOptions
+                           , readFormatOptions
                            , readFormatOptionsFromFile
+                           , readFormatOptionsFromPath
                            , removeSpecialInlineHead
                            , setDefaultStyle
                            , setIndentWidth
                            , setInlineMaxWidth
+                           , setPreserveBlankLines
                            , setSpecialInlineHead
                            )
 

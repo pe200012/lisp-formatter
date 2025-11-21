@@ -40,11 +40,13 @@ data Special = Special { atom :: !Text, style :: !FormatStyle }
 instance FromDhall Special
 
 data FormatOptions
-  = FormatOptions { indentWidth    :: !Int
-                  , inlineMaxWidth :: !Int
-                  , defaultStyle   :: !FormatStyle  -- default formatting for atoms not in specials
-                  , specials       :: ![ Special ]  -- dedicated type for inline head rules
-                  }
+  = FormatOptions
+  { indentWidth        :: !Int
+  , inlineMaxWidth     :: !Int
+  , defaultStyle       :: !FormatStyle  -- default formatting for atoms not in specials
+  , specials           :: ![ Special ]  -- dedicated type for inline head rules
+  , preserveBlankLines :: !Bool         -- whether to preserve blank lines in source code
+  }
   deriving ( Eq, Show, Generic )
 
 instance FromDhall FormatOptions
@@ -61,5 +63,5 @@ data DelimiterType = Paren | Bracket | Brace
 data SExpr = Atom Text | StringLit Text | List DelimiterType [ Node ] | QuoteExpr QuoteKind SExpr
   deriving ( Eq, Show )
 
-data Node = NodeExpr SExpr | NodeComment Text
+data Node = NodeExpr SExpr | NodeComment Text | NodeBlankLine
   deriving ( Eq, Show )

@@ -54,11 +54,30 @@ parseProgram input = case runParser parser "lisp" input of
   Right ast -> Right ast
   where
     parser = do
-      skipSpace
-      nodes <- many (Text.Megaparsec.try (parseComment <|> NodeExpr <$> parseExpr))
-      skipSpace
+      skipNonNewlineSpace
+      nodes <- many (Text.Megaparsec.try parseTopLevelNode)
+      trailingNewlines <- countNewlines
+      skipNonNewlineSpace
       eof
-      pure nodes
+      let allNodes = concat nodes
+      pure $ allNodes ++ replicate (trailingNewlines - 1) NodeBlankLine
+
+parseTopLevelNode :: Parser [ Node ]
+parseTopLevelNode = do
+  skipNonNewlineSpace
+  newlines <- countNewlines
+  node <- parseComment <|> NodeExpr <$> parseExpr
+  if newlines > 1
+    then pure (replicate (newlines - 1) NodeBlankLine ++ [ node ])
+    else pure [ node ]
+
+countNewlines :: Parser Int
+countNewlines = do
+  spaces <- many (satisfy isSpace)
+  pure $ length $ filter (== '\n') spaces
+
+skipNonNewlineSpace :: Parser ()
+skipNonNewlineSpace = void $ many (satisfy (\c -> isSpace c && c /= '\n'))
 
 parseExpr :: Parser SExpr
 parseExpr = do

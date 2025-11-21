@@ -32,12 +32,13 @@ import           Types      ( DelimiterType(..)
 -- Main formatting functions
 
 renderProgram :: FormatOptions -> [ Node ] -> Text
-renderProgram opts = T.intercalate "\n" . map rlText . concatMap (formatNode opts 0)
+renderProgram opts nodes = T.intercalate "\n" $ map rlText $ concatMap (formatNode opts 0) nodes
 
 formatNode :: FormatOptions -> Int -> Node -> [ RenderLine ]
 formatNode opts level = \case
   NodeComment txt -> [ RenderLine (indentText opts level <> ";" <> txt) KindComment ]
   NodeExpr expr   -> formatExpr opts level expr
+  NodeBlankLine   -> ([ RenderLine "" KindBlankLine | preserveBlankLines opts ])
 
 formatExpr :: FormatOptions -> Int -> SExpr -> [ RenderLine ]
 formatExpr opts level = \case
@@ -106,6 +107,7 @@ formatList opts level delim nodes = case nodes of
           Just compact -> [ RenderLine (alignIndent <> compact) KindExpr ]
           Nothing      -> formatNode opts (level + 1) (NodeExpr expr)  -- Fall back to regular formatting
         formatAligned (NodeComment txt) = [ RenderLine (alignIndent <> ";" <> txt) KindComment ]
+        formatAligned NodeBlankLine     = []  -- Blank lines don't make sense in aligned context
 
     finalize ls ns
       = if isLastComment ns
@@ -202,11 +204,12 @@ formatList opts level delim nodes = case nodes of
 
     renderCompactNode (NodeExpr expr) = renderCompactExpr expr
     renderCompactNode (NodeComment _) = Nothing
+    renderCompactNode NodeBlankLine   = Nothing
 
 --------------------------------------------------------------------------------
 -- Helper data types and functions
 
-data LineKind = KindExpr | KindComment
+data LineKind = KindExpr | KindComment | KindBlankLine
   deriving ( Eq, Show )
 
 data RenderLine = RenderLine { rlText :: !Text, rlKind :: !LineKind }
@@ -274,6 +277,7 @@ renderCompactExpr = \case
     where
       renderNode (NodeExpr e)   = renderCompactExpr e
       renderNode NodeComment {} = Nothing
+      renderNode NodeBlankLine  = Nothing
 
 quotePrefix :: QuoteKind -> Text
 quotePrefix = \case
