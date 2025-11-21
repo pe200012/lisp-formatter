@@ -35,7 +35,7 @@ instance FromDhall AlignStyle
 -- | Formatting style for special forms.
 data FormatStyle
   = InlineHead !Int          -- ^ Inline first N arguments, then force newlines for rest
-  | NewlineAlign !Int        -- ^ Always newline and indent by N
+  | Newline                  -- ^ Always newline
   | TryInline                -- ^ Try inline all unless line width not enough
   deriving ( Eq, Show, Generic )
 

@@ -50,7 +50,7 @@ defaultOptions
                , Special { atom = "lambda", style = InlineHead 1 }
                , Special { atom = "defn", style = TryInline }
                , Special { atom = "defmacro", style = InlineHead 2 }
-               , Special { atom = "do", style = NewlineAlign 0 }
+               , Special { atom = "do", style = Newline }
                ]
   , aligns = [ AlignRule { alignAtom = "if", alignStyle = Align } ]
   , preserveBlankLines = True

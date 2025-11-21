@@ -1,0 +1,1 @@
+let Style = < InlineHead : Integer | InlineHeadOneline : Integer | InlineAlign : Integer | Newline | TryInline > in { indentWidth = +4, inlineMaxWidth = +100, defaultStyle = Style.InlineHeadOneline +1, specials = [] : List { atom : Text, style : Style }, preserveBlankLines = True }

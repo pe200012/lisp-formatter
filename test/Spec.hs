@@ -159,8 +159,8 @@ spec dataFiles = do
             Left err  -> error $ "Format failed: " ++ show err
       defaultGolden "inline-align-style" result
 
-    it "formats with NewlineAlign style" $ do
-      let opts   = setSpecialInlineHead "test" (NewlineAlign 1) defaultOptions
+    it "formats with Newline style" $ do
+      let opts   = setSpecialInlineHead "test" Newline defaultOptions
           input  = "(test arg1 arg2 arg3)"
           result = case formatLisp opts input of
             Right out -> out

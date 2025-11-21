@@ -30,7 +30,7 @@ This test suite uses [hspec-golden](https://hackage.haskell.org/package/hspec-go
 - **Unicode Support**: Tests for unicode in atoms and strings
 - **Different Delimiters**: Tests for `[]` brackets and `{}` braces (Clojure-style)
 - **Special Inline Heads**: Tests for special forms like `if`, `define` with inline args
-- **Different Format Styles**: Tests for various formatting strategies (InlineAlign, NewlineAlign, TryInline)
+- **Different Format Styles**: Tests for various formatting strategies (InlineAlign, Newline, TryInline)
 
 ### Format Styles
 
@@ -38,7 +38,7 @@ The formatter supports different formatting strategies for special forms:
 
 - **InlineHead n**: Inline the first `n` arguments, rest on new lines (original behavior)
 - **InlineAlign n**: Inline first `n` arguments (unless exceeding line width), rest align with last inlined argument
-- **NewlineAlign n**: Always put arguments on new lines
+- **Newline**: Always put arguments on new lines
 - **TryInline**: Try to inline all arguments unless exceeding line width
 
 ### Adding New Tests

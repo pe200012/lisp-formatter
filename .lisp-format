@@ -1,10 +1,8 @@
-let Style =
-      < InlineHead : Integer
-      | InlineHeadOneline : Integer
-      | InlineAlign : Integer
-      | NewlineAlign : Integer
-      | TryInline
-      >
+let Style = < InlineHead : Integer | Newline | TryInline >
+
+let AlignStyle = < Normal | Align >
+
+let AlignRule = { alignAtom : Text, alignStyle : AlignStyle }
 
 let Special = { atom : Text, style : Style }
 
@@ -13,24 +11,38 @@ let LispFormatConfig =
           { indentWidth : Integer
           , inlineMaxWidth : Integer
           , defaultStyle : Style
+          , defaultAlign : AlignStyle
           , specials : List Special
+          , aligns : List AlignRule
+          , preserveBlankLines : Bool
           }
-      , default.specials = [] : List Special
+      , default =
+        { specials = [] : List Special
+        , aligns = [] : List AlignRule
+        , preserveBlankLines = True
+        }
       }
 
 in  LispFormatConfig::{
     , indentWidth = +2
     , inlineMaxWidth = +60
-    , defaultStyle = Style.InlineHeadOneline +1
+    , defaultStyle = Style.TryInline
+    , defaultAlign = AlignStyle.Normal
+    , preserveBlankLines = True
     , specials =
-      [ { atom = "if", style = Style.InlineHeadOneline +1 }
-      , { atom = "cond", style = Style.InlineHeadOneline +1 }
-      , { atom = "define", style = Style.InlineHeadOneline +2 }
-      , { atom = "let", style = Style.InlineHeadOneline +1 }
-      , { atom = "my-special", style = Style.InlineHeadOneline +3 }
+      [ { atom = "if", style = Style.InlineHead +1 }
+      , { atom = "cond", style = Style.InlineHead +1 }
+      , { atom = "define", style = Style.InlineHead +2 }
+      , { atom = "fn", style = Style.InlineHead +2 }
+      , { atom = "let", style = Style.InlineHead +1 }
+      , { atom = "my-special", style = Style.InlineHead +3 }
       , { atom = "test-head", style = Style.InlineHead +1 }
-      , { atom = "test-align", style = Style.InlineAlign +1 }
-      , { atom = "test-align2", style = Style.InlineAlign +2 }
+      , { atom = "test-align", style = Style.InlineHead +1 }
+      , { atom = "test-align2", style = Style.InlineHead +2 }
       , { atom = "test-try", style = Style.TryInline }
+      ]
+    , aligns =
+      [ { alignAtom = "test-align", alignStyle = AlignStyle.Align }
+      , { alignAtom = "test-align2", alignStyle = AlignStyle.Align }
       ]
     }

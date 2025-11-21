@@ -69,17 +69,17 @@ formatList opts level delim nodes = case nodes of
       -> finalize (lineHead : formatRest restNodes) nodes
     | otherwise -> case nodes of
       (NodeExpr (Atom atomName) : args) -> case defaultStyle opts of
-        InlineHead n   -> maybe
+        InlineHead n -> maybe
           (finalize (baseLine : body) nodes)
           (\( lh, rest, mbAlignCol ) -> case mbAlignCol of
              Just alignCol -> finalize (lh : formatRestAligned alignCol rest) nodes
              Nothing       -> finalize (lh : formatRest rest) nodes)
           (renderInlineHeadStyleWithAlign opts level delim atomName args n)
-        NewlineAlign n -> maybe
+        Newline      -> maybe
           (finalize (baseLine : body) nodes)
           (\( lh, rest ) -> finalize (lh : formatRest rest) nodes)
-          (renderNewlineAlignStyle opts level delim atomName args n)
-        TryInline      -> maybe
+          (renderNewlineAlignStyle opts level delim atomName args)
+        TryInline    -> maybe
           (finalize (baseLine : body) nodes)
           (\( lh, rest ) -> finalize (lh : formatRest rest) nodes)
           (renderTryInlineStyle opts level delim atomName args)
@@ -128,22 +128,22 @@ formatList opts level delim nodes = case nodes of
     renderSpecialInlineAlign o lvl d (NodeExpr (Atom atomName) : args) = do
       headRule <- find ((== atomName) . atom) (specials o)
       case style headRule of
-        InlineHead n   -> do
+        InlineHead n -> do
           ( lh, rest, mbAlignCol ) <- renderInlineHeadStyleWithAlign o lvl d atomName args n
           alignCol <- mbAlignCol
           Just ( lh, rest, alignCol )
-        NewlineAlign _ -> Nothing
-        TryInline      -> Nothing
+        Newline      -> Nothing
+        TryInline    -> Nothing
     renderSpecialInlineAlign _ _ _ _ = Nothing
 
     renderSpecialInlineHead o lvl d (NodeExpr (Atom atomName) : args) = do
       headRule <- find ((== atomName) . atom) (specials o)
       case style headRule of
-        InlineHead n   -> do
+        InlineHead n -> do
           ( lh, rest, _ ) <- renderInlineHeadStyleWithAlign o lvl d atomName args n
           Just ( lh, rest )
-        NewlineAlign n -> renderNewlineAlignStyle o lvl d atomName args n
-        TryInline      -> renderTryInlineStyle o lvl d atomName args
+        Newline      -> renderNewlineAlignStyle o lvl d atomName args
+        TryInline    -> renderTryInlineStyle o lvl d atomName args
     renderSpecialInlineHead _ _ _ _ = Nothing
 
     -- Helper to find align style for an atom
@@ -173,7 +173,7 @@ formatList opts level delim nodes = case nodes of
           Normal -> Just ( RenderLine atomText KindExpr, restArgs, Nothing )
         else Nothing
 
-    renderNewlineAlignStyle o lvl _ atomName args _
+    renderNewlineAlignStyle o lvl _ atomName args
       = let
           firstLine = RenderLine (indentText o lvl <> openDelim <> atomName) KindExpr
         in 
