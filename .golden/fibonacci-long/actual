@@ -1,0 +1,7 @@
+(define-function
+  (calculate-fibonacci-number n)
+  (if (less-than-or-equal n 1)
+    n
+    (plus
+      (calculate-fibonacci-number (minus n 1))
+      (calculate-fibonacci-number (minus n 2)))))

@@ -64,14 +64,18 @@ spec dataFiles = do
     goldenTest "multi-line-defun" "(defun hello (name)\n  (print name))"
 
   describe "formatLisp - whitespace handling" $ do
-    goldenTest "trailing-newline" "(foo bar)\n"
-    goldenTest "multiple-trailing-newlines" "(foo bar)\n\n\n"
-    goldenTest "leading-newlines" "\n\n(foo bar)"
-    goldenTest "leading-and-trailing-newlines" "\n\n(foo bar)\n\n"
+    whitespaceTest "trailing-newline" "(foo bar)\n"
+    whitespaceTest "multiple-trailing-newlines" "(foo bar)\n\n\n"
+    whitespaceTest "leading-newlines" "\n\n(foo bar)"
+    whitespaceTest "leading-and-trailing-newlines" "\n\n(foo bar)\n\n"
     goldenTest "whitespace-between-expressions" "(a)\n\n(b)"
     goldenTest "trailing-whitespace-multiple-expressions" "(a)\n\n(b)\n\n"
-    goldenTest "empty-lists-trailing-whitespace" "(fn (if  true (let  ) ) )\n\n"
-    goldenTest "spaces-and-tabs" "  \t (foo)  \t\n"
+    whitespaceTest "empty-lists-trailing-whitespace" "(fn (if  true (let  ) ) )\n\n"
+    whitespaceTest "spaces-and-tabs" "  \t (foo)  \t\n"
+    whitespaceTest "multiple-toplevel-items" "(define x 1)\n(define y 2)\n(define z 3)"
+    whitespaceTest
+      "multiple-toplevel-items-mixed"
+      "(define x 1)\n(if true (print \"yes\"))\n(define z 3)"
 
   describe "formatLisp - error handling" $ do
     it "reports unclosed parenthesis" $ do
@@ -176,6 +180,14 @@ testDataFile filePath = do
 goldenTest :: String -> String -> Spec
 goldenTest name input = it ("formats " ++ name) $ do
   let result = case formatLisp defaultOptions input of
+        Right out -> out
+        Left err  -> error $ "Format failed: " ++ show err
+  defaultGolden name result
+
+whitespaceTest :: String -> String -> Spec
+whitespaceTest name input = it ("formats " ++ name) $ do
+  let opts = setPreserveBlankLines False defaultOptions
+  let result = case formatLisp opts input of
         Right out -> out
         Left err  -> error $ "Format failed: " ++ show err
   defaultGolden name result
