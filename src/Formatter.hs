@@ -113,9 +113,30 @@ formatList opts level delim nodes = case nodes of
       where
         alignIndent = T.replicate alignCol " "
 
-        formatAligned (NodeExpr expr)   = case renderCompactExpr expr of
+        -- Calculate the level that corresponds to alignCol
+        alignLevel = alignCol `div` max 1 (indentWidth opts)
+
+        formatAligned (NodeExpr expr)   = case renderCompactExpr opts expr of
           Just compact -> [ RenderLine (alignIndent <> compact) KindExpr ]
-          Nothing      -> formatNode opts (level + 1) (NodeExpr expr)  -- Fall back to regular formatting
+          Nothing      ->
+            -- For non-compact expressions, format at the alignment level
+            -- and adjust the first line's indentation to match alignCol
+            let
+                formatted = formatNode opts alignLevel (NodeExpr expr)
+              in 
+                case formatted of
+                  [] -> []
+                  (firstLine : rest) -> let
+                      currentIndent = indentText opts alignLevel
+                      newIndent     = alignIndent
+                      adjusted
+                        = firstLine { rlText = newIndent
+                                        <> fromMaybe
+                                          (rlText firstLine)
+                                          (T.stripPrefix currentIndent (rlText firstLine))
+                                    }
+                    in 
+                      adjusted : rest
         formatAligned (NodeComment txt) = [ RenderLine (alignIndent <> ";" <> txt) KindComment ]
         formatAligned NodeBlankLine     = []  -- Blank lines don't make sense in aligned context
 
@@ -125,14 +146,14 @@ formatList opts level delim nodes = case nodes of
         else attachClosing ls closeDelim
 
     renderInlineSimple o lvl d ns = do
-      inline <- renderCompactListSimple d ns
+      inline <- renderCompactListSimple o d ns
       let lineText = indentText o lvl <> inline
       if T.length lineText <= inlineMaxWidth o
         then Just lineText
         else Nothing
 
     renderInlineHead o lvl _ (NodeExpr first : rest) = do
-      inlineFirst <- renderCompactExpr first
+      inlineFirst <- renderCompactExpr o first
       let firstText = indentText o lvl <> openDelim <> inlineFirst
       if T.length firstText <= inlineMaxWidth o
         then Just ( RenderLine firstText KindExpr, rest )
@@ -171,7 +192,7 @@ formatList opts level delim nodes = case nodes of
     -- Returns (line, rest, Maybe alignCol) where alignCol is Just if Align style is used
     renderInlineHeadStyleWithAlign o lvl _ atomName args inlineCount = do
       let ( inlineArgs, restArgs ) = splitAt inlineCount args
-      inlineParts <- traverse renderCompactNode inlineArgs
+      inlineParts <- traverse (renderCompactNode o) inlineArgs
       let atomText
             = indentText o lvl <> openDelim <> atomName <> " " <> T.intercalate " " inlineParts
       if T.length atomText <= inlineMaxWidth o
@@ -252,20 +273,20 @@ formatList opts level delim nodes = case nodes of
     formatBindingPair opt nodeList = T.intercalate " " $ map (formatNodeForBinding opt) nodeList
 
     formatNodeForBinding :: FormatOptions -> Node -> Text
-    formatNodeForBinding _ (NodeExpr expr) = fromMaybe "" (renderCompactExpr expr)
+    formatNodeForBinding opt (NodeExpr expr) = fromMaybe "" (renderCompactExpr opt expr)
     formatNodeForBinding _ _ = ""
 
     renderTryInlineStyle o lvl _ atomName args = do
-      inlineParts <- traverse renderCompactNode args
+      inlineParts <- traverse (renderCompactNode o) args
       let atomText
             = indentText o lvl <> openDelim <> atomName <> " " <> T.intercalate " " inlineParts
       if T.length atomText <= inlineMaxWidth o
         then Just ( RenderLine atomText KindExpr, [] )
         else Nothing  -- Fall back to regular formatting
 
-    renderCompactNode (NodeExpr expr) = renderCompactExpr expr
-    renderCompactNode (NodeComment _) = Nothing
-    renderCompactNode NodeBlankLine   = Nothing
+    renderCompactNode o (NodeExpr expr) = renderCompactExpr o expr
+    renderCompactNode _ (NodeComment _) = Nothing
+    renderCompactNode _ NodeBlankLine   = Nothing
 
 --------------------------------------------------------------------------------
 -- Helper data types and functions
@@ -315,30 +336,52 @@ emptyDelim delim
     in 
       open <> close
 
-renderCompactListSimple :: DelimiterType -> [ Node ] -> Maybe Text
-renderCompactListSimple delim nodes = do
+renderCompactListSimple :: FormatOptions -> DelimiterType -> [ Node ] -> Maybe Text
+renderCompactListSimple opts delim nodes = do
   parts <- traverse inline nodes
   let ( open, close ) = delimiterPair delim
   pure $ open <> T.intercalate " " parts <> close
   where
-    inline (NodeExpr expr) = renderCompactExpr expr
+    inline (NodeExpr expr) = renderCompactExpr opts expr
     inline _ = Nothing
 
-renderCompactExpr :: SExpr -> Maybe Text
-renderCompactExpr = \case
-  Atom t -> Just t
-  StringLit t -> Just (encodeString t)
-  QuoteExpr kind expr -> do
-    inner <- renderCompactExpr expr
-    Just (quotePrefix kind <> inner)
-  List delim nodes -> do
-    parts <- traverse renderNode nodes
-    let ( open, close ) = delimiterPair delim
-    Just $ open <> T.intercalate " " parts <> close
-    where
-      renderNode (NodeExpr e)   = renderCompactExpr e
-      renderNode NodeComment {} = Nothing
-      renderNode NodeBlankLine  = Nothing
+renderCompactExpr :: FormatOptions -> SExpr -> Maybe Text
+renderCompactExpr _ (Atom t) = Just t
+renderCompactExpr _ (StringLit t) = Just (encodeString t)
+renderCompactExpr opts (QuoteExpr kind expr) = do
+  inner <- renderCompactExpr opts expr
+  Just (quotePrefix kind <> inner)
+renderCompactExpr opts (List delim nodes)
+  =
+  -- Check if this list has a special formatting rule that prevents inlining
+  case nodes of
+    (NodeExpr (Atom atomName) : args) ->
+      -- First check for common block constructs that should never be inlined
+      if atomName `elem` [ "do", "begin", "progn" ] && not (null args)
+        then Nothing
+        else 
+          -- Check if there's a special rule for this atom
+          case find ((== atomName) . atom) (specials opts) of
+            Just rule -> case style rule of
+              -- BindingsHead style should not be inlined if it has content
+              -- Empty bindings heads like (let) can still be inlined
+              BindingsHead _ -> if null args
+                then compactList opts delim nodes
+                else Nothing
+              -- Other styles can potentially be inlined
+              _ -> compactList opts delim nodes
+            Nothing   -> compactList opts delim nodes
+    _ -> compactList opts delim nodes
+
+compactList :: FormatOptions -> DelimiterType -> [ Node ] -> Maybe Text
+compactList opts delim nodes = do
+  parts <- traverse renderNode nodes
+  let ( open, close ) = delimiterPair delim
+  Just $ open <> T.intercalate " " parts <> close
+  where
+    renderNode (NodeExpr e)   = renderCompactExpr opts e
+    renderNode NodeComment {} = Nothing
+    renderNode NodeBlankLine  = Nothing
 
 quotePrefix :: QuoteKind -> Text
 quotePrefix = \case
