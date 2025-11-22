@@ -27,6 +27,7 @@ dependencies:
 - dhall >= 1.40 && < 1.43
 - directory >= 1.3 && < 1.4
 - filepath >= 1.4 && < 1.5
+- mtl >= 2.3 && < 2.5
 
 ghc-options:
 - -Wall
@@ -66,3 +67,4 @@ tests:
     - hspec >= 2.10 && < 2.12
     - hspec-golden >= 0.2 && < 0.3
     - directory >= 1.3 && < 1.4
+    - filepath >= 1.5 && < 1.6

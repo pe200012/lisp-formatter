@@ -1,0 +1,1 @@
+[NodeComment " Test parsing atoms",NodeExpr (Atom "foo"),NodeExpr (Atom "bar-baz"),NodeExpr (Atom "+"),NodeExpr (Atom "-"),NodeExpr (Atom "*"),NodeExpr (Atom "/"),NodeExpr (Atom "="),NodeExpr (Atom "<"),NodeExpr (Atom ">"),NodeExpr (Atom "<="),NodeExpr (Atom ">="),NodeExpr (Atom "hello-world"),NodeExpr (Atom "test123"),NodeExpr (Atom "x"),NodeExpr (Atom "y"),NodeExpr (Atom "z")]

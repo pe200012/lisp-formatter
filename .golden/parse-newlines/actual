@@ -1,0 +1,1 @@
+[NodeComment "bbb",NodeExpr (List Paren [NodeExpr (Atom "1"),NodeExpr (Atom "2"),NodeExpr (Atom "3")]),NodeComment "aaa",NodeBlankLine 1,NodeComment " aaa",NodeExpr (List Paren [NodeExpr (Atom "4"),NodeExpr (Atom "5"),NodeExpr (Atom "6")]),NodeBlankLine 1,NodeComment " two lines",NodeBlankLine 2,NodeComment " x",NodeBlankLine 2]

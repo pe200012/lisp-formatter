@@ -79,5 +79,5 @@ data DelimiterType = Paren | Bracket | Brace
 data SExpr = Atom Text | StringLit Text | List DelimiterType [ Node ] | QuoteExpr QuoteKind SExpr
   deriving ( Eq, Show )
 
-data Node = NodeExpr SExpr | NodeExprRaw SExpr Text | NodeComment Text | NodeBlankLine
+data Node = NodeExpr SExpr | NodeExprRaw SExpr Text | NodeComment Text | NodeBlankLine Int
   deriving ( Eq, Show )

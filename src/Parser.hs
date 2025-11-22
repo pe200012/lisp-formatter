@@ -17,7 +17,8 @@ module Parser
   ) where
 
 import           Control.Applicative  ( (<|>) )
-import           Control.Monad        ( void )
+import           Control.Monad        ( void, when )
+import           Control.Monad.State  ( State, evalState, gets, modify )
 
 import           Data.Char            ( isSpace )
 import           Data.Text            ( Text )
@@ -25,14 +26,15 @@ import qualified Data.Text            as T
 import           Data.Void            ( Void )
 
 import qualified Text.Megaparsec      as MP
-import           Text.Megaparsec      ( Parsec
+import           Text.Megaparsec      ( (<?>)
+                                      , ParsecT
                                       , anySingle
                                       , choice
                                       , eof
                                       , getOffset
                                       , many
                                       , manyTill
-                                      , runParser
+                                      , runParserT
                                       , satisfy
                                       , takeWhile1P
                                       , takeWhileP
@@ -44,58 +46,47 @@ import           Types                ( DelimiterType(..), Node(..), QuoteKind(.
 --------------------------------------------------------------------------------
 -- Parser type
 
-type Parser = Parsec Void Text
+data ParserState = ParserState { skipFormatting :: Bool, fullInput :: Text }
+
+type Parser = ParsecT Void Text (State ParserState)
 
 --------------------------------------------------------------------------------
 -- Main parsing functions
 
 parseProgram :: Text -> Either String [ Types.Node ]
-parseProgram input = case runParser parser "lisp" input of
+parseProgram input = case evalState (runParserT parser "lisp" input) (ParserState False input) of
   Left err  -> Left $ show err
   Right ast -> Right ast
   where
-    parser = do
-      skipNonNewlineSpace
-      nodes <- many (MP.try (parseTopLevelNode input))
-      trailingNewlines <- countNewlines
-      skipNonNewlineSpace
-      eof
-      let allNodes = concat nodes
-      pure $ allNodes ++ replicate (trailingNewlines - 1) NodeBlankLine
+    parser = many parseNode <* eof
 
-parseTopLevelNode :: Text -> Parser [ Node ]
-parseTopLevelNode fullInput = do
-  skipNonNewlineSpace
+parseNode :: Parser Node
+parseNode = MP.try parseBlankLines <|> parseComment <|> parseNodeExpr
+
+parseBlankLines :: Parser Node
+parseBlankLines = do
   newlines <- countNewlines
-  node <- parseComment <|> NodeExpr <$> parseExpr
+  if newlines > 0
+    then pure (NodeBlankLine newlines)
+    else MP.empty <?> "expected blank lines"
 
-  -- Check if this is a skip directive comment
-  let isSkip = case node of
-        NodeComment txt -> "lisp-format skip" `T.isInfixOf` txt
-        _ -> False
-
-  -- If skip directive, mark the next expression to preserve raw text
-  nextNode <- if isSkip
+parseNodeExpr :: Parser Node
+parseNodeExpr = do
+  isSkipped <- gets skipFormatting
+  if isSkipped
     then do
-      skipNonNewlineSpace
-      _ <- countNewlines
-      nextStartPos <- getOffset
-      nextExpr <- MP.try parseExpr
-      nextEndPos <- getOffset
-      let rawText = T.take (nextEndPos - nextStartPos) $ T.drop nextStartPos fullInput
-      pure [ NodeExprRaw nextExpr rawText ]
-    else pure []
-
-  let blankLines = replicate (newlines - 1) NodeBlankLine
-  pure $ blankLines ++ [ node ] ++ nextNode
-
-countNewlines :: Parser Int
-countNewlines = do
-  spaces <- many (satisfy isSpace)
-  pure $ length $ filter (== '\n') spaces
+      startPos <- getOffset
+      expr <- MP.try parseExpr
+      endPos <- getOffset
+      optionalNewline
+      whole <- gets fullInput
+      let rawText = T.take (endPos - startPos) $ T.drop startPos whole
+      modify (\s -> s { skipFormatting = False })
+      pure (NodeExprRaw expr rawText)
+    else NodeExpr <$> parseExpr <* optionalNewline
 
 skipNonNewlineSpace :: Parser ()
-skipNonNewlineSpace = void $ many (satisfy (\c -> isSpace c && c /= '\n'))
+skipNonNewlineSpace = void $ many (satisfy (\c -> isSpace c && c /= '\n' && c /= '\r'))
 
 parseExpr :: Parser SExpr
 parseExpr = do
@@ -122,14 +113,27 @@ parseNodeInList = do
   newlines <- countNewlines
   node <- parseComment <|> NodeExpr <$> parseExpr
   if newlines > 1
-    then pure (replicate (newlines - 1) NodeBlankLine ++ [ node ])
+    then pure (NodeBlankLine (newlines - 1) : [ node ])
     else pure [ node ]
+
+countNewlines :: Parser Int
+countNewlines = go 0
+  where
+    go n = do
+      skipNonNewlineSpace
+      rn <- MP.optional (string "\n" <|> string "\r\n" <|> string "\r")
+      case rn of
+        Just _  -> go (n + 1)
+        Nothing -> pure n
 
 parseComment :: Parser Node
 parseComment = do
   _ <- char ';'
   content <- takeWhileP Nothing (/= '\n')
-  _ <- optionalNewline
+  when
+    (T.dropWhile isSpace content == "lisp-format skip")
+    (modify (\s -> s { skipFormatting = True }))
+  optionalNewline
   pure . NodeComment $ T.stripEnd content
 
 parseQuoted :: Parser SExpr

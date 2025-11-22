@@ -1,0 +1,1 @@
+[NodeExpr (List Paren [NodeExpr (Atom "define"),NodeExpr (Atom "x"),NodeExpr (Atom "1")]),NodeExpr (List Paren [NodeExpr (Atom "if"),NodeExpr (Atom "true"),NodeExpr (List Paren [NodeExpr (Atom "print"),NodeExpr (StringLit "yes")])]),NodeExpr (List Paren [NodeExpr (Atom "define"),NodeExpr (Atom "z"),NodeExpr (Atom "3")])]

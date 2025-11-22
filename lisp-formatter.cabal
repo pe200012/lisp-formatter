@@ -43,6 +43,7 @@ library
     , directory ==1.3.*
     , filepath ==1.4.*
     , megaparsec >=9.0 && <10
+    , mtl >=2.3 && <2.5
     , optparse-applicative >=0.16 && <0.19
     , text >=2.0 && <2.2
   default-language: Haskell2010
@@ -63,6 +64,7 @@ executable lisp-format
     , filepath ==1.4.*
     , lisp-formatter
     , megaparsec >=9.0 && <10
+    , mtl >=2.3 && <2.5
     , optparse-applicative >=0.16 && <0.19
     , text >=2.0 && <2.2
   default-language: Haskell2010
@@ -81,11 +83,12 @@ test-suite lisp-formatter-test
       base >=4.7 && <5
     , dhall >=1.40 && <1.43
     , directory ==1.3.*
-    , filepath ==1.4.*
+    , filepath ==1.5.*
     , hspec >=2.10 && <2.12
     , hspec-golden ==0.2.*
     , lisp-formatter
     , megaparsec >=9.0 && <10
+    , mtl >=2.3 && <2.5
     , optparse-applicative >=0.16 && <0.19
     , text >=2.0 && <2.2
   default-language: Haskell2010

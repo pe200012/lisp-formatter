@@ -18,6 +18,7 @@ module Lib
   , readFormatOptionsFromPath
   , formatLispText
   , formatLisp
+  , parseProgram
   ) where
 
 import           Config    ( defaultOptions

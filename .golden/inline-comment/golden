@@ -1,3 +1,2 @@
-(foo
-  ; comment
-  bar)
+(foo ; comment
+     bar)

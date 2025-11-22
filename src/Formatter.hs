@@ -1,409 +1,290 @@
 {-# LANGUAGE LambdaCase #-}
+
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Formatter
-  ( renderProgram
-  , formatNode
-  , formatExpr
-  , formatList
-  , exprLine
-  , indentText
-  , delimiterPair
-  , emptyDelim
-  , quotePrefix
-  , encodeString
-  ) where
+module Formatter ( renderProgram ) where
 
-import           Data.List  ( find )
-import           Data.Maybe ( fromMaybe )
-import           Data.Text  ( Text )
-import qualified Data.Text  as T
+import           Control.Monad.Reader ( MonadReader(local), Reader, ask, asks, runReader )
 
-import           Types      ( AlignRule(..)
-                            , AlignStyle(..)
-                            , DelimiterType(..)
-                            , FormatOptions(..)
-                            , FormatStyle(..)
-                            , Node(..)
-                            , QuoteKind(..)
-                            , SExpr(..)
-                            , Special(..)
-                            )
+import           Data.List            ( find )
+import           Data.List.NonEmpty   ( NonEmpty((:|)) )
+import qualified Data.List.NonEmpty   as NL
+import           Data.Text            ( Text )
+import qualified Data.Text            as T
 
---------------------------------------------------------------------------------
--- Main formatting functions
+import           Debug.Trace          ( trace, traceShowId )
+
+import           Types                ( AlignRule(..)
+                                      , AlignStyle(..)
+                                      , DelimiterType(..)
+                                      , FormatOptions(..)
+                                      , FormatStyle(..)
+                                      , Node(..)
+                                      , QuoteKind(..)
+                                      , SExpr(..)
+                                      , Special(..)
+                                      )
+
+data Doc
+  = Embrace Text Text Doc
+  | Indent Int (NonEmpty Doc)
+  | Seq (NonEmpty Doc)
+  | Liner (NonEmpty Text)
+  | TextNode Text
+  | EmptyNode
+  | NewlineNode Int
+  | Prefix Text Doc
+  deriving ( Show )
+
+estimateLength :: Doc -> Int
+estimateLength (Embrace _ _ content) = estimateLength content + 2
+estimateLength (Indent indent (x :| _)) = estimateLength x + indent
+estimateLength (Seq docs) = sum (estimateLength <$> NL.toList docs)
+estimateLength (Liner txts) = sum (T.length <$> txts) + (length txts - 1)
+estimateLength (TextNode txt) = T.length txt
+estimateLength EmptyNode = 0
+estimateLength NewlineNode {} = 0
+estimateLength (Prefix pre doc) = T.length pre + estimateLength doc
+
+newtype FormatState = FormatState { options :: FormatOptions }
+
+renderDoc :: Int -> Doc -> Text
+renderDoc indent (Embrace open close content) = open <> renderDoc indent content <> close
+renderDoc indent (Indent ind docs)
+  = T.intercalate "\n" $ NL.toList $ fmap (\d -> T.replicate (indent + ind) " "
+                                           <> renderDoc (indent + ind) d) docs
+renderDoc indent (Seq docs) = T.concat $ NL.toList $ fmap (renderDoc indent) docs
+renderDoc _ (Liner txt) = T.unwords $ NL.toList txt
+renderDoc _ (TextNode txt) = txt
+renderDoc _ EmptyNode = ""
+renderDoc _ (NewlineNode n) = T.replicate n "\n"
+renderDoc indent (Prefix pre doc) = pre <> renderDoc indent doc
 
 renderProgram :: FormatOptions -> [ Node ] -> Text
-renderProgram opts nodes = T.intercalate "\n" $ concat $ addSeparators formattedNodes
+renderProgram opts nodes
+  = T.concat $ map (renderDoc 0) (traceShowId (sep (traceShowId activeNodes) (traceShowId txt) []))
   where
-    -- Format each node to its text lines
-    formattedNodes = map (\node -> ( node, map rlText $ formatNode opts 0 node )) nodes
+    activeNodes
+      | preserveBlankLines opts = nodes
+      | otherwise = filter (\case
+                              NodeBlankLine {} -> False
+                              _ -> True) nodes
 
-    -- Group consecutive formatted outputs, inserting empty lines between top-level expressions
-    addSeparators [] = []
-    addSeparators [ ( _, nodeLines ) ] = [ nodeLines ]
-    addSeparators (( node1, lines1 ) : ( node2, lines2 ) : rest) = case ( node1, node2 ) of
-      ( NodeExpr _, NodeExpr _ ) -> lines1 : [ "" ] : addSeparators (( node2, lines2 ) : rest)
-      _ -> lines1 : addSeparators (( node2, lines2 ) : rest)
+    txt = mapM formatNode activeNodes `runReader` FormatState { options = opts }
 
-formatNode :: FormatOptions -> Int -> Node -> [ RenderLine ]
-formatNode opts level = \case
-  NodeComment txt       -> [ RenderLine (indentText opts level <> ";" <> txt) KindComment ]
-  NodeExpr expr         -> formatExpr opts level expr
-  NodeExprRaw _ rawText -> [ RenderLine rawText KindExpr ]  -- Output raw text for skipped nodes
-  NodeBlankLine         -> ([ RenderLine "" KindBlankLine | preserveBlankLines opts ])
+    sep [] _ acc = reverse acc
+    sep _ [] acc = reverse acc
+    sep [ _ ] [ y ] acc = reverse (y : acc)
+    sep (NodeComment {} : xs) (y : ys) acc = sep xs ys (NewlineNode 1 : y : acc)
+    sep (NodeBlankLine {} : xs) (y : ys) acc = sep xs ys (y : acc)
+    sep (_ : xs@(NodeBlankLine {} : _)) (y : ys) acc = sep xs ys (NewlineNode 1 : y : acc)
+    sep (_ : xs) (y : ys) acc = sep xs ys (NewlineNode 2 : y : acc)
 
-formatExpr :: FormatOptions -> Int -> SExpr -> [ RenderLine ]
-formatExpr opts level = \case
-  Atom t -> [ exprLine opts level t ]
-  StringLit t -> [ exprLine opts level (encodeString t) ]
-  QuoteExpr kind expr -> case formatExpr opts level expr of
-    [] -> [ exprLine opts level (quotePrefix kind) ]
-    (line0 : rest) -> let
-        prefix   = indentText opts level <> quotePrefix kind
-        stripped = fromMaybe (rlText line0) (T.stripPrefix (indentText opts level) (rlText line0))
-        newFirst = line0 { rlText = prefix <> stripped }
+formatNode :: Node -> Reader FormatState Doc
+formatNode (NodeExpr sexpr)         = formatSExpr sexpr
+formatNode (NodeExprRaw _sexpr raw) = return (TextNode raw)
+formatNode (NodeComment text)       = return $ TextNode (";" <> text)
+formatNode (NodeBlankLine n)        = return (NewlineNode n)
+
+formatSExpr :: SExpr -> Reader FormatState Doc
+formatSExpr (Atom txt) = return (TextNode txt)
+formatSExpr (StringLit txt) = return (TextNode (encodeString txt))
+formatSExpr (QuoteExpr qkind sexpr) = do
+  innerDoc <- formatSExpr sexpr
+  return (Prefix quoteSymbol innerDoc)
+  where
+    quoteSymbol = case qkind of
+      Quote           -> "'"
+      Quasiquote      -> "`"
+      Unquote         -> ","
+      UnquoteSplicing -> ",@"
+formatSExpr (List delimTyp []) = return $ Embrace open close EmptyNode
+  where
+    ( open, close ) = delimiters delimTyp
+formatSExpr (List delimTyp nodes) = do
+  opt <- asks options
+  case nodes of
+    [ x ] -> do
+      innerDoc <- formatNode x
+      return $ Embrace open close innerDoc
+    (at : rh : rest) -> let
+        atStyle
+          = maybe (defaultStyle opt) style (find (\s -> atom s == atText) (specials opt))
+        atAlignStyle
+          = maybe (defaultAlign opt) alignStyle (find (\ar -> alignAtom ar == atText) (aligns opt))
+        atText       = case at of
+          NodeExpr (Atom t) -> t
+          NodeExprRaw (Atom t) _ -> t
+          _ -> ""
       in 
-        newFirst : rest
-  List delim nodes -> formatList opts level delim nodes
-
-formatList :: FormatOptions -> Int -> DelimiterType -> [ Node ] -> [ RenderLine ]
-formatList opts level delim nodes = case nodes of
-  [] -> [ exprLine opts level (emptyDelim delim) ]
-  _
-    | Just ( lineHead, restNodes, alignCol ) <- renderSpecialInlineAlign opts level delim nodes
-      -> finalize (lineHead : formatRestAligned alignCol restNodes) nodes
-    | Just ( lineHead, restNodes ) <- renderSpecialInlineHead opts level delim nodes
-      -> finalize (lineHead : formatRest restNodes) nodes
-    | Just result <- tryDefaultStyle -> result
-    | Just inline <- renderInlineSimple opts level delim nodes -> [ RenderLine inline KindExpr ]
-    | Just ( lineHead, restNodes ) <- renderInlineHead opts level delim nodes
-      -> finalize (lineHead : formatRest restNodes) nodes
-    | otherwise -> finalize (baseLine : body) nodes
+        formatList atStyle atAlignStyle open close at (rh :| rest)
   where
-    indentCur = indentText opts level
+    ( open, close ) = delimiters delimTyp
 
-    ( openDelim, closeDelim ) = delimiterPair delim
+formatList
+  :: FormatStyle -> AlignStyle -> Text -> Text -> Node -> NonEmpty Node -> Reader FormatState Doc
+formatList atStyle atAlignStyle open close at rest = case atStyle of
+  InlineHead n    -> do
+    maxWidth <- asks (inlineMaxWidth . options)
+    indSize <- asks (indentWidth . options)
+    let ( inlineArgs, newlineArgs ) = splitArguments n (NL.toList rest)
+    oneline <- do
+      newlineDocs <- mapM formatNode newlineArgs
+      let inlined = plainNode <$> at :| inlineArgs
+          indent  = case atAlignStyle of
+            Align  -> estimateAlignWidth (NL.toList inlined) + 1
+            Normal -> indSize
+      return $ Embrace open close $ Seq $ Liner inlined :| case newlineDocs of
+        []        -> []
+        (hd : tl) -> [ NewlineNode 1, Indent indent (hd :| tl) ]
+    stair <- do
+      atDoc <- formatNode at
+      let inlineDocs = plainNode <$> inlineArgs
+          indent     = case atAlignStyle of
+            Align  -> estimateAlignWidth inlineDocs + 1 + indSize
+            Normal -> indSize
+      newlineDocs <- mapM formatNode newlineArgs
+      return
+        $ Embrace open close
+        $ Seq
+        $ atDoc
+        :| (case inlineDocs of
+              []        -> []
+              (hd : tl)
+                -> [ NewlineNode 1, Indent (indSize * 2) $ NL.singleton (Liner (hd :| tl)) ])
+        <> (case newlineDocs of
+              []        -> []
+              (hd : tl) -> [ NewlineNode 1, Indent indent (hd :| tl) ])
+    if
+      | estimateLength oneline <= maxWidth -> return oneline
+      | estimateLength stair <= maxWidth -> return stair
+      | otherwise -> formatList Newline atAlignStyle open close at rest
+  BindingsHead _n -> let
+      binding :| bodyArgs = rest
+    in 
+      case binding of
+        NodeExpr (List delim nodes) -> do
+          atNode <- formatNode at
+          maxWidth <- asks (inlineMaxWidth . options)
+          indSize <- asks (indentWidth . options)
+          body <- mapM formatNode bodyArgs
+          let firstLineBinding = take 2 nodes
+              oneline          = formatBindings delim (estimateLength atNode + 5 - indSize) nodes
+              onelineLen
+                = estimateLength atNode + sum (T.length . plainNode <$> firstLineBinding) + 4
+              twoline          = formatBindings delim 1 nodes
+              onelineIndent    = case atAlignStyle of
+                Align  -> estimateLength atNode + 2
+                Normal -> indSize
+              twolineIndent    = case atAlignStyle of
+                Align  -> 2 * indSize
+                Normal -> indSize
+          if onelineLen <= maxWidth
+            then return
+              $ Embrace open close
+              $ Seq
+              $ atNode :| [ TextNode " ", oneline ] <> case body of
+                []        -> []
+                (hd : tl) -> [ NewlineNode 1, Indent onelineIndent (hd :| tl) ]
+            else return
+              $ Embrace open close
+              $ Seq
+              $ atNode :| [ NewlineNode 1, Indent (2 * indSize) (NL.singleton twoline) ]
+              <> case body of
+                []        -> []
+                (hd : tl) -> [ NewlineNode 1, Indent twolineIndent (hd :| tl) ]
+        _ -> formatList Newline atAlignStyle open close at rest
+  Newline         -> do
+    atDoc <- formatNode at
+    restDocs <- mapM formatNode rest
+    indent <- asks (indentWidth . options)
+    return $ Embrace open close (Seq (atDoc :| [ NewlineNode 1, Indent indent restDocs ]))
+  TryInline       -> do
+    maxWidth <- asks (inlineMaxWidth . options)
+    indent <- asks (indentWidth . options)
+    let oneline  = Embrace open close $ Liner $ NL.cons (plainNode at) (plainNode <$> rest)
+        twolines
+          = Embrace open close
+          $ Seq
+          $ TextNode (plainNode at)
+          :| [ Indent indent (NL.singleton $ Liner (plainNode <$> rest)) ]
+    if
+      | estimateLength oneline <= maxWidth -> return oneline
+      | estimateLength twolines <= maxWidth -> return twolines
+      | otherwise -> formatList Newline atAlignStyle open close at rest
 
-    baseLine = RenderLine (indentCur <> openDelim) KindExpr
-
-    body = concatMap (formatNode opts (level + 1)) nodes
-
-    formatRest = concatMap (formatNode opts (level + 1))
-
-    formatRestAligned alignCol = concatMap formatAligned
-      where
-        alignIndent = T.replicate alignCol " "
-
-        -- Calculate the level that corresponds to alignCol
-        alignLevel = alignCol `div` max 1 (indentWidth opts)
-
-        formatAligned (NodeExpr expr)         = case renderCompactExpr opts expr of
-          Just compact -> [ RenderLine (alignIndent <> compact) KindExpr ]
-          Nothing      ->
-            -- For non-compact expressions, format at the alignment level
-            -- and adjust the first line's indentation to match alignCol
-            let
-                formatted = formatNode opts alignLevel (NodeExpr expr)
-              in 
-                case formatted of
-                  [] -> []
-                  (firstLine : rest) -> let
-                      currentIndent = indentText opts alignLevel
-                      newIndent     = alignIndent
-                      adjusted
-                        = firstLine { rlText = newIndent
-                                        <> fromMaybe
-                                          (rlText firstLine)
-                                          (T.stripPrefix currentIndent (rlText firstLine))
-                                    }
-                    in 
-                      adjusted : rest
-        formatAligned (NodeExprRaw _ rawText) = [ RenderLine rawText KindExpr ]  -- Output raw text
-        formatAligned (NodeComment txt)
-          = [ RenderLine (alignIndent <> ";" <> txt) KindComment ]
-        formatAligned NodeBlankLine           = []  -- Blank lines don't make sense in aligned context
-
-    finalize ls ns
-      = if isLastComment ns
-        then ls ++ [ RenderLine (indentCur <> closeDelim) KindExpr ]
-        else attachClosing ls closeDelim
-
-    tryDefaultStyle :: Maybe [ RenderLine ]
-    tryDefaultStyle = case nodes of
-      (NodeExpr (Atom atomName) : args) -> if null args
-        then Nothing
-        else case defaultStyle opts of
-          InlineHead n   -> renderInlineHeadStyleWithAlign opts level delim atomName args n
-            >>= \( lh, rest, mbAlignCol ) -> case mbAlignCol of
-              Just alignCol -> Just (finalize (lh : formatRestAligned alignCol rest) nodes)
-              Nothing       -> Just (finalize (lh : formatRest rest) nodes)
-          BindingsHead n -> renderBindingsHeadStyle opts level delim atomName args n
-            >>= \( lh, rest ) -> Just (finalize (lh : formatRest rest) nodes)
-          Newline        -> renderNewlineAlignStyle opts level delim atomName args
-            >>= \( lh, rest ) -> Just (finalize (lh : formatRest rest) nodes)
-          TryInline      -> renderTryInlineStyle opts level delim atomName args >>= \( lh, rest )
-            -> Just (finalize (lh : formatRest rest) nodes)
-      _ -> Nothing
-
-    renderInlineSimple o lvl d ns = do
-      inline <- renderCompactListSimple o d ns
-      let lineText = indentText o lvl <> inline
-      if T.length lineText <= inlineMaxWidth o
-        then Just lineText
-        else Nothing
-
-    renderInlineHead o lvl _ (NodeExpr first : rest) = do
-      inlineFirst <- renderCompactExpr o first
-      let firstText = indentText o lvl <> openDelim <> inlineFirst
-      if T.length firstText <= inlineMaxWidth o
-        then Just ( RenderLine firstText KindExpr, rest )
-        else Nothing
-    renderInlineHead _ _ _ _ = Nothing
-
-    renderSpecialInlineAlign o lvl d (NodeExpr (Atom atomName) : args) = do
-      headRule <- find ((== atomName) . atom) (specials o)
-      case style headRule of
-        InlineHead n   -> do
-          ( lh, rest, mbAlignCol ) <- renderInlineHeadStyleWithAlign o lvl d atomName args n
-          alignCol <- mbAlignCol
-          Just ( lh, rest, alignCol )
-        BindingsHead _ -> Nothing
-        Newline        -> Nothing
-        TryInline      -> Nothing
-    renderSpecialInlineAlign _ _ _ _ = Nothing
-
-    renderSpecialInlineHead o lvl d (NodeExpr (Atom atomName) : args) = do
-      headRule <- find ((== atomName) . atom) (specials o)
-      case style headRule of
-        InlineHead n   -> do
-          ( lh, rest, _ ) <- renderInlineHeadStyleWithAlign o lvl d atomName args n
-          Just ( lh, rest )
-        BindingsHead n -> renderBindingsHeadStyle o lvl d atomName args n
-        Newline        -> renderNewlineAlignStyle o lvl d atomName args
-        TryInline      -> renderTryInlineStyle o lvl d atomName args
-    renderSpecialInlineHead _ _ _ _ = Nothing
-
-    -- Helper to find align style for an atom
-    findAlignStyle atomName = case find ((== atomName) . alignAtom) (aligns opts) of
-      Just rule -> alignStyle rule
-      Nothing   -> defaultAlign opts
-
-    -- InlineHead with alignment support
-    -- Returns (line, rest, Maybe alignCol) where alignCol is Just if Align style is used
-    renderInlineHeadStyleWithAlign o lvl _ atomName args inlineCount = do
-      let ( inlineArgs, restArgs ) = splitAt inlineCount args
-      inlineParts <- traverse (renderCompactNode o) inlineArgs
-      let inlineText = T.intercalate " " inlineParts
-          hasSpace   = not (T.null inlineText)
-          spaceStr
-            = if hasSpace
-              then " "
-              else ""
-          atomText   = indentText o lvl <> openDelim <> atomName <> spaceStr <> inlineText
-      if T.length atomText <= inlineMaxWidth o
-        then case findAlignStyle atomName of
-          Align  -> do
-            -- Calculate where the last inlined argument starts
-            let atomAndPrefix    = indentText o lvl <> openDelim <> atomName <> spaceStr
-                allButLastInline = take (length inlineParts - 1) inlineParts
-                beforeLastLength
-                  = if null allButLastInline
-                    then 0
-                    else T.length (T.intercalate " " allButLastInline) + 1  -- +1 for the space
-                alignColumn      = T.length atomAndPrefix + beforeLastLength
-            Just ( RenderLine atomText KindExpr, restArgs, Just alignColumn )
-          Normal -> Just ( RenderLine atomText KindExpr, restArgs, Nothing )
-        else Nothing
-
-    renderNewlineAlignStyle o lvl _ atomName args
-      = let
-          firstLine = RenderLine (indentText o lvl <> openDelim <> atomName) KindExpr
-        in 
-          Just ( firstLine, args )  -- Always format with newline
-
-    renderBindingsHeadStyle opt lev outerDelim atomName args bindingsCount = do
-      let ( bindingArgs, restArgs ) = splitAt bindingsCount args
-      case bindingArgs of
-        [ NodeExpr (List bindingDelim bindingNodes) ] -> do
-          -- Prepare binding block and body lines
-          let ( outerOpen, _ )  = delimiterPair outerDelim
-              bodyLines         = concatMap (formatNode opt (lev + 1)) restArgs
-              bindingPrefix     = indentText opt lev <> outerOpen <> atomName <> " "
-              bindingIndentCols
-                = T.length bindingPrefix + T.length (fst (delimiterPair bindingDelim))
-              bindingLines
-                = formatBindingsList opt bindingDelim bindingNodes bindingIndentCols
-              lineGroups        = case bindingLines of
-                [] -> [ bindingPrefix
-                        <> fst (delimiterPair bindingDelim)
-                        <> snd (delimiterPair bindingDelim)
-                      ]
-                (firstBindingLine : restBindingLines) -> (bindingPrefix <> firstBindingLine)
-                  : restBindingLines
-              allLines          = lineGroups ++ map rlText bodyLines
-              fullText          = T.intercalate "\n" allLines
-          Just ( RenderLine fullText KindExpr, [] )
-        _ -> Nothing
-
-    formatBindingsList :: FormatOptions -> DelimiterType -> [ Node ] -> Int -> [ Text ]
-    formatBindingsList opt delimType bindingNodes indentCols
-      = let
-          ( openDel, closeDel ) = delimiterPair delimType
-          pairs = case bindingNodes of
-            [] -> []
-            _  -> map (formatBindingPair opt) (groupIntoPairs bindingNodes)
-          appendClosing :: [ Text ] -> [ Text ]
-          appendClosing = \case
-            [] -> []
-            [ single ] -> [ single <> closeDel ]
-            (line : rest) -> line : appendClosing rest
-        in 
-          case pairs of
-            [] -> [ openDel <> closeDel ]
-            (firstPair : restPairs) -> let
-                firstLine = openDel <> firstPair
-                spacing   = T.replicate indentCols " "
-                restLines = case restPairs of
-                  [] -> []
-                  xs -> map (spacing <>) xs
-              in 
-                appendClosing (firstLine : restLines)
-
-    groupIntoPairs :: [ a ] -> [ [ a ] ]
-    groupIntoPairs [] = []
-    groupIntoPairs (x : y : rest) = [ x, y ] : groupIntoPairs rest
-    groupIntoPairs [ x ] = [ [ x ] ]
-
-    formatBindingPair :: FormatOptions -> [ Node ] -> Text
-    formatBindingPair opt nodeList = T.intercalate " " $ map (formatNodeForBinding opt) nodeList
-
-    formatNodeForBinding :: FormatOptions -> Node -> Text
-    formatNodeForBinding opt (NodeExpr expr) = fromMaybe "" (renderCompactExpr opt expr)
-    formatNodeForBinding _ _ = ""
-
-    renderTryInlineStyle o lvl _ atomName args = do
-      inlineParts <- traverse (renderCompactNode o) args
-      let atomText
-            = indentText o lvl <> openDelim <> atomName <> " " <> T.intercalate " " inlineParts
-      if T.length atomText <= inlineMaxWidth o
-        then Just ( RenderLine atomText KindExpr, [] )
-        else Nothing  -- Fall back to regular formatting
-
-    renderCompactNode o (NodeExpr expr)   = renderCompactExpr o expr
-    renderCompactNode _ (NodeExprRaw _ _) = Nothing  -- Cannot compact skipped nodes
-    renderCompactNode _ (NodeComment _)   = Nothing
-    renderCompactNode _ NodeBlankLine     = Nothing
-
---------------------------------------------------------------------------------
--- Helper data types and functions
-
-data LineKind = KindExpr | KindComment | KindBlankLine
-  deriving ( Eq, Show )
-
-data RenderLine = RenderLine { rlText :: !Text, rlKind :: !LineKind }
-
-isLastComment :: [ Node ] -> Bool
-isLastComment [] = False
-isLastComment ns = case last ns of
-  NodeComment _ -> True
-  _ -> False
-
-attachClosing :: [ RenderLine ] -> Text -> [ RenderLine ]
-attachClosing [] closingText   = [ RenderLine closingText KindExpr ]
-attachClosing rows closingText = case breakLastExpr rows of
-  Nothing -> rows ++ [ RenderLine closingText KindExpr ]
-  Just ( prefix, lastExpr, suffix )
-    -> prefix ++ [ lastExpr { rlText = rlText lastExpr <> closingText } ] ++ suffix
-
-breakLastExpr :: [ RenderLine ] -> Maybe ( [ RenderLine ], RenderLine, [ RenderLine ] )
-breakLastExpr xs = go [] (reverse xs)
+formatBindings :: DelimiterType -> Int -> [ Node ] -> Doc
+formatBindings delim align nodes = case chunksOf 2 nodes of
+  [] -> Embrace open close EmptyNode
+  [ x ] -> Embrace open close $ Liner $ NL.fromList (plainNode <$> x)
+  (firstPair : restPairs) -> let
+      firstLine = Liner (NL.fromList (plainNode <$> firstPair))
+      restLines = (\pair -> Liner (NL.fromList (plainNode <$> pair))) <$> restPairs
+    in 
+      Embrace open close
+      $ Seq
+      $ firstLine :| [ NewlineNode 1, Indent align (NL.fromList restLines) ]
   where
-    go _ [] = Nothing
-    go suffix (y : ys)
-      | rlKind y == KindExpr = Just ( reverse ys, y, reverse suffix )
-      | otherwise = go (y : suffix) ys
+    ( open, close ) = delimiters delim
 
-exprLine :: FormatOptions -> Int -> Text -> RenderLine
-exprLine opts level content = RenderLine (indentText opts level <> content) KindExpr
+estimateAlignWidth :: [ Text ] -> Int
+estimateAlignWidth [] = 0
+estimateAlignWidth [ _ ] = 0
+estimateAlignWidth nodes@(_ : _ : _)
+  = sum (T.length <$> take (length nodes - 1) nodes) + (length nodes - 1)
 
-indentText :: FormatOptions -> Int -> Text
-indentText opts level = T.replicate (level * max 0 (indentWidth opts)) " "
+plainNode :: Node -> Text
+plainNode (NodeExpr sexpr)         = plainSExpr sexpr
+plainNode (NodeExprRaw _sexpr raw) = raw
+plainNode (NodeComment text)       = ";" <> text
+plainNode (NodeBlankLine n)        = T.replicate n "\n"
 
-delimiterPair :: DelimiterType -> ( Text, Text )
-delimiterPair = \case
+plainSExpr :: SExpr -> Text
+plainSExpr (Atom txt) = txt
+plainSExpr (StringLit txt) = encodeString txt
+plainSExpr (QuoteExpr qkind sexpr) = quoteSymbol <> plainSExpr sexpr
+  where
+    quoteSymbol = case qkind of
+      Quote           -> "'"
+      Quasiquote      -> "`"
+      Unquote         -> ","
+      UnquoteSplicing -> ",@"
+plainSExpr (List delimTyp nodes) = open <> inner <> close
+  where
+    ( open, close ) = delimiters delimTyp
+
+    inner           = T.unwords (map plainNode nodes)
+
+splitArguments :: Int -> [ Node ] -> ( [ Node ], [ Node ] )
+splitArguments n xs = go n xs []
+  where
+    go 0 ys acc = ( reverse acc, ys )
+    go _ [] acc = ( reverse acc, [] )
+    -- comments cause line breaks
+    go _ (y@NodeComment {} : ys) acc = ( reverse (y : acc), ys )
+    go m (y : ys) acc = go (m - 1) ys (y : acc)
+
+delimiters :: DelimiterType -> ( Text, Text )
+delimiters delimTyp = case delimTyp of
   Paren   -> ( "(", ")" )
   Bracket -> ( "[", "]" )
   Brace   -> ( "{", "}" )
 
-emptyDelim :: DelimiterType -> Text
-emptyDelim delim
-  = let
-      ( open, close ) = delimiterPair delim
-    in 
-      open <> close
-
-renderCompactListSimple :: FormatOptions -> DelimiterType -> [ Node ] -> Maybe Text
-renderCompactListSimple opts delim nodes = do
-  parts <- traverse inline nodes
-  let ( open, close ) = delimiterPair delim
-  pure $ open <> T.intercalate " " parts <> close
+chunksOf :: Int -> [ e ] -> [ [ e ] ]
+chunksOf i ls = map (take i) (splitter ls (:) [])
   where
-    inline (NodeExpr expr) = renderCompactExpr opts expr
-    inline _ = Nothing
-
-renderCompactExpr :: FormatOptions -> SExpr -> Maybe Text
-renderCompactExpr _ (Atom t) = Just t
-renderCompactExpr _ (StringLit t) = Just (encodeString t)
-renderCompactExpr opts (QuoteExpr kind expr) = do
-  inner <- renderCompactExpr opts expr
-  Just (quotePrefix kind <> inner)
-renderCompactExpr opts (List delim nodes)
-  =
-  -- Check if this list has a special formatting rule that prevents inlining
-  case nodes of
-    (NodeExpr (Atom atomName) : args) ->
-      -- First check for common block constructs that should never be inlined
-      if atomName `elem` [ "do", "begin", "progn" ] && not (null args)
-        then Nothing
-        else 
-          -- Check if there's a special rule for this atom
-          case find ((== atomName) . atom) (specials opts) of
-            Just rule -> case style rule of
-              -- BindingsHead style should not be inlined if it has content
-              -- Empty bindings heads like (let) can still be inlined
-              BindingsHead _ -> if null args
-                then compactList opts delim nodes
-                else Nothing
-              -- Other styles can potentially be inlined
-              _ -> compactList opts delim nodes
-            Nothing   -> compactList opts delim nodes
-    _ -> compactList opts delim nodes
-
-compactList :: FormatOptions -> DelimiterType -> [ Node ] -> Maybe Text
-compactList opts delim nodes = do
-  parts <- traverse renderNode nodes
-  let ( open, close ) = delimiterPair delim
-  Just $ open <> T.intercalate " " parts <> close
-  where
-    renderNode (NodeExpr e)      = renderCompactExpr opts e
-    renderNode (NodeExprRaw _ _) = Nothing  -- Cannot compact skipped nodes
-    renderNode NodeComment {}    = Nothing
-    renderNode NodeBlankLine     = Nothing
-
-quotePrefix :: QuoteKind -> Text
-quotePrefix = \case
-  Quote           -> "'"
-  Quasiquote      -> "`"
-  Unquote         -> ","
-  UnquoteSplicing -> ",@"
+    splitter :: [ e ] -> ([ e ] -> a -> a) -> a -> a
+    splitter [] _ n = n
+    splitter l c n  = l `c` splitter (drop i l) c n
 
 encodeString :: Text -> Text
-encodeString = (<> "\"") . ("\"" <>) . T.concatMap encodeChar
+encodeString txt = "\"" <> T.concatMap escapeChar txt <> "\""
   where
-    encodeChar '"'  = "\\\""
-    encodeChar '\\' = "\\\\"
-    encodeChar '\n' = "\\n"
-    encodeChar '\r' = "\\r"
-    encodeChar '\t' = "\\t"
-    encodeChar c    = T.singleton c
+    escapeChar :: Char -> Text
+    escapeChar '"'  = "\\\""
+    escapeChar '\\' = "\\\\"
+    escapeChar '\n' = "\\n"
+    escapeChar '\r' = "\\r"
+    escapeChar '\t' = "\\t"
+    escapeChar c    = T.singleton c

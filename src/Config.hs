@@ -41,8 +41,8 @@ defaultOptions
   = FormatOptions
   { indentWidth = 2
   , inlineMaxWidth = 80
-  , defaultStyle = TryInline
-  , defaultAlign = Normal
+  , defaultStyle = InlineHead 1
+  , defaultAlign = Align
   , specials = [ Special { atom = "if", style = InlineHead 1 }
                , Special { atom = "cond", style = InlineHead 1 }
                , Special { atom = "define", style = InlineHead 2 }
@@ -53,7 +53,7 @@ defaultOptions
                , Special { atom = "do", style = Newline }
                ]
   , aligns = [ AlignRule { alignAtom = "if", alignStyle = Align } ]
-  , preserveBlankLines = True
+  , preserveBlankLines = False
   }
 
 -- | Update the indentation width, clamping to non-negative values.

@@ -1,0 +1,1 @@
+[NodeComment " Test parsing comments",NodeComment " simple comment",NodeExpr (List Paren [NodeExpr (Atom "foo")]),NodeComment " comment before expression",NodeComment " multi-line",NodeComment " comment",NodeExpr (List Paren [NodeExpr (Atom "bar"),NodeExpr (Atom "baz")]),NodeComment " inline comment ; this is ignored",NodeExpr (List Paren [NodeExpr (Atom "qux")])]

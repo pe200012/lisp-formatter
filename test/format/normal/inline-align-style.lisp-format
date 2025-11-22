@@ -1,0 +1,46 @@
+let Style =
+      < InlineHead : Integer | BindingsHead : Integer | Newline | TryInline >
+
+let AlignStyle = < Normal | Align >
+
+let AlignRule = { alignAtom : Text, alignStyle : AlignStyle }
+
+let Special = { atom : Text, style : Style }
+
+let LispFormatConfig =
+      { Type =
+          { indentWidth : Integer
+          , inlineMaxWidth : Integer
+          , defaultStyle : Style
+          , defaultAlign : AlignStyle
+          , specials : List Special
+          , aligns : List AlignRule
+          , preserveBlankLines : Bool
+          }
+      , default =
+        { specials = [] : List Special
+        , aligns = [] : List AlignRule
+        , preserveBlankLines = True
+        }
+      }
+
+in  LispFormatConfig::{
+    , indentWidth = +2
+    , inlineMaxWidth = +80
+    , defaultStyle = Style.InlineHead +1
+    , defaultAlign = AlignStyle.Align
+    , specials = [ { atom = "if", style = Style.InlineHead +1 }
+                 , { atom = "cond", style = Style.InlineHead +1 }
+                 , { atom = "define", style = Style.InlineHead +2 }
+                 , { atom = "let", style = Style.BindingsHead +1 }
+                 , { atom = "lambda", style = Style.InlineHead +1 }
+                 , { atom = "defn", style = Style.TryInline }
+                 , { atom = "defmacro", style = Style.InlineHead +2 }
+                 , { atom = "do", style = Style.Newline }
+                 , { atom = "test", style = Style.InlineHead +2 }
+                 ]
+    , aligns = [ { alignAtom = "if", alignStyle = AlignStyle.Align }
+               , { alignAtom = "test", alignStyle = AlignStyle.Align }
+               ]
+    , preserveBlankLines = False
+    }

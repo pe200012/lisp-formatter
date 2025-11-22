@@ -1,0 +1,13 @@
+; Test parsing strings
+""
+"hello"
+"hello world"
+"with spaces"
+"with\ttabs"
+"with\nnewlines"
+"with\\backslashes"
+"with\"quotes"
+"mixed \"quotes\" and 'single'"
+"escape sequences: \n \r \t \\ \""
+"unicode: こんにちは"
+"numbers: 123 456"
