@@ -106,8 +106,18 @@ The formatter supports a small set of layout styles that control how a list (a h
      c)
 ```
 
-- NewlineAlign N
-  Always break after the head and indent the subsequent lines by additional N spaces.
+- Bindings
+  The arguments are treated as bindings and formatted in pairs on separate lines.
+  The remaining arguments are formatted normally. Useful for `let` and similar constructs.
+
+```lisp
+(let [a b
+        c d]
+  body)
+```
+
+- Newline
+  Always break after the head and indent the subsequent lines.
   Use this for forms that should always be vertical for readability.
 
 ```lisp
@@ -137,17 +147,24 @@ Minimal example configuration (Dhall):
 ```dhall
 let Style =
       < InlineHead : Integer
-      | InlineHeadOneline : Integer
-      | InlineAlign : Integer
-      | NewlineAlign : Integer
+      | Bindings
+      | Newline
       | TryInline
       >
 
+let AlignStyle = < Normal | Align >
+
+let AlignRule = { alignAtom : Text, alignStyle : AlignStyle }
+
+let Special = { atom : Text, style : Style }
+
 in { indentWidth = +2
    , inlineMaxWidth = +80
-   , defaultStyle = Style.InlineHeadOneline +1
-   , specials = [] : List { atom : Text, style : Style }
-   , preserveBlankLines = True
+   , defaultStyle = Style.InlineHead +1
+   , defaultAlign = AlignStyle.Align
+   , specials = [] : List Special
+   , aligns = [] : List AlignRule
+   , preserveBlankLines = False
    }
 ```
 
@@ -155,7 +172,9 @@ Fields
 - `indentWidth`: number of spaces used for each indentation level.
 - `inlineMaxWidth`: maximum line width for keeping a list on one line.
 - `defaultStyle`: default layout choice for unknown forms.
+- `defaultAlign`: default alignment style for arguments.
 - `specials`: list of special-case rules for particular head atoms.
+- `aligns`: list of alignment rules for specific atoms.
 - `preserveBlankLines`: when `True` blank lines are preserved; when `False` the formatter normalizes whitespace.
 
 ## Library use
