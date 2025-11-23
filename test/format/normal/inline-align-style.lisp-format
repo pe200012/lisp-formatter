@@ -1,5 +1,4 @@
-let Style =
-      < InlineHead : Integer | BindingsHead : Integer | Newline | TryInline >
+let Style = < InlineHead : Integer | Bindings | Newline | TryInline >
 
 let AlignStyle = < Normal | Align >
 
@@ -29,18 +28,20 @@ in  LispFormatConfig::{
     , inlineMaxWidth = +80
     , defaultStyle = Style.InlineHead +1
     , defaultAlign = AlignStyle.Align
-    , specials = [ { atom = "if", style = Style.InlineHead +1 }
-                 , { atom = "cond", style = Style.InlineHead +1 }
-                 , { atom = "define", style = Style.InlineHead +2 }
-                 , { atom = "let", style = Style.BindingsHead +1 }
-                 , { atom = "lambda", style = Style.InlineHead +1 }
-                 , { atom = "defn", style = Style.TryInline }
-                 , { atom = "defmacro", style = Style.InlineHead +2 }
-                 , { atom = "do", style = Style.Newline }
-                 , { atom = "test", style = Style.InlineHead +2 }
-                 ]
-    , aligns = [ { alignAtom = "if", alignStyle = AlignStyle.Align }
-               , { alignAtom = "test", alignStyle = AlignStyle.Align }
-               ]
+    , specials =
+      [ { atom = "if", style = Style.InlineHead +1 }
+      , { atom = "cond", style = Style.InlineHead +1 }
+      , { atom = "define", style = Style.InlineHead +2 }
+      , { atom = "let", style = Style.Bindings }
+      , { atom = "lambda", style = Style.InlineHead +1 }
+      , { atom = "defn", style = Style.TryInline }
+      , { atom = "defmacro", style = Style.InlineHead +2 }
+      , { atom = "do", style = Style.Newline }
+      , { atom = "test", style = Style.InlineHead +2 }
+      ]
+    , aligns =
+      [ { alignAtom = "if", alignStyle = AlignStyle.Align }
+      , { alignAtom = "test", alignStyle = AlignStyle.Align }
+      ]
     , preserveBlankLines = False
     }

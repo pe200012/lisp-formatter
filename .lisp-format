@@ -1,5 +1,4 @@
-let Style =
-      < InlineHead : Integer | BindingsHead : Integer | Newline | TryInline >
+let Style = < InlineHead : Integer | Bindings | Newline | TryInline >
 
 let AlignStyle = < Normal | Align >
 
@@ -26,24 +25,21 @@ let LispFormatConfig =
 
 in  LispFormatConfig::{
     , indentWidth = +2
-    , inlineMaxWidth = +60
-    , defaultStyle = Style.TryInline
-    , defaultAlign = AlignStyle.Normal
+    , inlineMaxWidth = +80
+    , defaultStyle = Style.InlineHead +1
+    , defaultAlign = AlignStyle.Align
     , preserveBlankLines = True
     , specials =
       [ { atom = "if", style = Style.InlineHead +1 }
       , { atom = "cond", style = Style.InlineHead +1 }
       , { atom = "define", style = Style.InlineHead +2 }
+      , { atom = "define-function", style = Style.InlineHead +1 }
       , { atom = "fn", style = Style.InlineHead +2 }
-      , { atom = "let", style = Style.BindingsHead +1 }
-      , { atom = "my-special", style = Style.InlineHead +3 }
-      , { atom = "test-head", style = Style.InlineHead +1 }
-      , { atom = "test-align", style = Style.InlineHead +1 }
-      , { atom = "test-align2", style = Style.InlineHead +2 }
-      , { atom = "test-try", style = Style.TryInline }
+      , { atom = "let", style = Style.Bindings }
       ]
     , aligns =
-      [ { alignAtom = "test-align", alignStyle = AlignStyle.Align }
-      , { alignAtom = "test-align2", alignStyle = AlignStyle.Align }
+      [ { alignAtom = "fn", alignStyle = AlignStyle.Normal }
+      , { alignAtom = "let", alignStyle = AlignStyle.Align }
+      , { alignAtom = "define-function", alignStyle = AlignStyle.Normal }
       ]
     }

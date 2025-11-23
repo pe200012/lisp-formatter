@@ -46,7 +46,7 @@ defaultOptions
   , specials = [ Special { atom = "if", style = InlineHead 1 }
                , Special { atom = "cond", style = InlineHead 1 }
                , Special { atom = "define", style = InlineHead 2 }
-               , Special { atom = "let", style = BindingsHead 1 }
+               , Special { atom = "let", style = Bindings }
                , Special { atom = "lambda", style = InlineHead 1 }
                , Special { atom = "defn", style = TryInline }
                , Special { atom = "defmacro", style = InlineHead 2 }

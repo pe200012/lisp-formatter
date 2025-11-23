@@ -1,5 +1,4 @@
-let Style =
-      < InlineHead : Integer | BindingsHead : Integer | Newline | TryInline >
+let Style = < InlineHead : Integer | Bindings | Newline | TryInline >
 
 let AlignStyle = < Normal | Align >
 

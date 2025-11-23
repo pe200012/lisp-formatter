@@ -1,5 +1,4 @@
-let Style =
-      < InlineHead : Integer | BindingsHead : Integer | Newline | TryInline >
+let Style = < InlineHead : Integer | Bindings | Newline | TryInline >
 
 let AlignStyle = < Normal | Align >
 
@@ -36,7 +35,7 @@ in  LispFormatConfig::{
       , { atom = "define", style = Style.InlineHead +2 }
       , { atom = "define-function", style = Style.InlineHead +1 }
       , { atom = "fn", style = Style.InlineHead +2 }
-      , { atom = "let", style = Style.BindingsHead +1 }
+      , { atom = "let", style = Style.Bindings }
       ]
     , aligns =
       [ { alignAtom = "fn", alignStyle = AlignStyle.Normal }

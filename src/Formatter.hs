@@ -13,8 +13,6 @@ import qualified Data.List.NonEmpty   as NL
 import           Data.Text            ( Text )
 import qualified Data.Text            as T
 
-import           Debug.Trace          ( trace, traceShowId )
-
 import           Types                ( AlignRule(..)
                                       , AlignStyle(..)
                                       , DelimiterType(..)
@@ -62,8 +60,7 @@ renderDoc _ (NewlineNode n) = T.replicate n "\n"
 renderDoc indent (Prefix pre doc) = pre <> renderDoc indent doc
 
 renderProgram :: FormatOptions -> [ Node ] -> Text
-renderProgram opts nodes
-  = T.concat $ map (renderDoc 0) (traceShowId (sep (traceShowId activeNodes) (traceShowId txt) []))
+renderProgram opts nodes = T.concat $ map (renderDoc 0) (sep activeNodes txt [])
   where
     activeNodes
       | preserveBlankLines opts = nodes
@@ -125,7 +122,7 @@ formatSExpr (List delimTyp nodes) = do
 formatList
   :: FormatStyle -> AlignStyle -> Text -> Text -> Node -> NonEmpty Node -> Reader FormatState Doc
 formatList atStyle atAlignStyle open close at rest = case atStyle of
-  InlineHead n    -> do
+  InlineHead n -> do
     maxWidth <- asks (inlineMaxWidth . options)
     indSize <- asks (indentWidth . options)
     let ( inlineArgs, newlineArgs ) = splitArguments n (NL.toList rest)
@@ -160,7 +157,7 @@ formatList atStyle atAlignStyle open close at rest = case atStyle of
       | estimateLength oneline <= maxWidth -> return oneline
       | estimateLength stair <= maxWidth -> return stair
       | otherwise -> formatList Newline atAlignStyle open close at rest
-  BindingsHead _n -> let
+  Bindings     -> let
       binding :| bodyArgs = rest
     in 
       case binding of
@@ -195,12 +192,12 @@ formatList atStyle atAlignStyle open close at rest = case atStyle of
                 []        -> []
                 (hd : tl) -> [ NewlineNode 1, Indent twolineIndent (hd :| tl) ]
         _ -> formatList Newline atAlignStyle open close at rest
-  Newline         -> do
+  Newline      -> do
     atDoc <- formatNode at
     restDocs <- mapM formatNode rest
     indent <- asks (indentWidth . options)
     return $ Embrace open close (Seq (atDoc :| [ NewlineNode 1, Indent indent restDocs ]))
-  TryInline       -> do
+  TryInline    -> do
     maxWidth <- asks (inlineMaxWidth . options)
     indent <- asks (indentWidth . options)
     let oneline  = Embrace open close $ Liner $ NL.cons (plainNode at) (plainNode <$> rest)
