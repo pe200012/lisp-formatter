@@ -14,7 +14,7 @@ in  defaults.LispFormatConfig::{
     , preserveBlankLines = False
     , specials =
       [ { atom = "strategy-inline"
-        , style = Style.Strategy [ Step.TryInline, Step.InlineHead +1 ]
+        , style = Style.Strategy [ Step.TryInline, Step.InlineFirst +1 ]
         }
       ]
     }

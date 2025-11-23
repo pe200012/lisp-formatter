@@ -123,7 +123,7 @@ formatSExpr (List delimTyp nodes) = do
 formatList
   :: FormatStyle -> AlignStyle -> Text -> Text -> Node -> NonEmpty Node -> Reader FormatState Doc
 formatList atStyle atAlignStyle open close at rest = case atStyle of
-  InlineHead n   -> do
+  InlineFirst n  -> do
     maxWidth <- asks (inlineMaxWidth . options)
     indSize <- asks (indentWidth . options)
     let ( inlineArgs, newlineArgs ) = splitArguments n (NL.toList rest)
@@ -315,7 +315,7 @@ encodeString txt = "\"" <> T.concatMap escapeChar txt <> "\""
 
 strategyStepToStyle :: StrategyStyle -> FormatStyle
 strategyStepToStyle = \case
-  StrategyInlineHead n -> InlineHead n
-  StrategyBindings     -> Bindings
-  StrategyNewline      -> Newline
-  StrategyTryInline    -> TryInline
+  StrategyInlineFirst n -> InlineFirst n
+  StrategyBindings      -> Bindings
+  StrategyNewline       -> Newline
+  StrategyTryInline     -> TryInline

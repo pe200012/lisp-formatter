@@ -7,7 +7,7 @@ let AlignStyle = defaults.AlignStyle
 in  defaults.LispFormatConfig::{
     , indentWidth = +2
     , inlineMaxWidth = +80
-    , defaultStyle = Style.InlineHead +1
+    , defaultStyle = Style.InlineFirst +1
     , defaultAlign = AlignStyle.Align
     , preserveBlankLines = False
     }

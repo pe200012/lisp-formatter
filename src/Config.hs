@@ -11,8 +11,8 @@ module Config
   , setAlignRule
   , removeAlignRule
   , setPreserveBlankLines
-  , setSpecialInlineHead
-  , removeSpecialInlineHead
+  , setSpecialInlineFirst
+  , removeSpecialInlineFirst
   , defaultOptions
   ) where
 
@@ -41,15 +41,15 @@ defaultOptions
   = FormatOptions
   { indentWidth = 2
   , inlineMaxWidth = 80
-  , defaultStyle = InlineHead 1
+  , defaultStyle = InlineFirst 1
   , defaultAlign = Align
-  , specials = [ Special { atom = "if", style = InlineHead 1 }
-               , Special { atom = "cond", style = InlineHead 1 }
-               , Special { atom = "define", style = InlineHead 2 }
+  , specials = [ Special { atom = "if", style = InlineFirst 1 }
+               , Special { atom = "cond", style = InlineFirst 1 }
+               , Special { atom = "define", style = InlineFirst 2 }
                , Special { atom = "let", style = Bindings }
-               , Special { atom = "lambda", style = InlineHead 1 }
+               , Special { atom = "lambda", style = InlineFirst 1 }
                , Special { atom = "defn", style = TryInline }
-               , Special { atom = "defmacro", style = InlineHead 2 }
+               , Special { atom = "defmacro", style = InlineFirst 2 }
                , Special { atom = "do", style = Newline }
                ]
   , aligns = [ AlignRule { alignAtom = "if", alignStyle = Align } ]
@@ -88,15 +88,15 @@ removeAlignRule :: Text -> FormatOptions -> FormatOptions
 removeAlignRule atomName opts = opts { aligns = filter ((/= atomName) . alignAtom) (aligns opts) }
 
 -- | Add or update a special inline head rule.
-setSpecialInlineHead :: Text -> FormatStyle -> FormatOptions -> FormatOptions
-setSpecialInlineHead atomName formatStyle opts
+setSpecialInlineFirst :: Text -> FormatStyle -> FormatOptions -> FormatOptions
+setSpecialInlineFirst atomName formatStyle opts
   = opts { specials = Special { atom = atomName, style = formatStyle }
              : filter ((/= atomName) . atom) (specials opts)
          }
 
 -- | Remove a special inline head rule.
-removeSpecialInlineHead :: Text -> FormatOptions -> FormatOptions
-removeSpecialInlineHead atomName opts
+removeSpecialInlineFirst :: Text -> FormatOptions -> FormatOptions
+removeSpecialInlineFirst atomName opts
   = opts { specials = filter ((/= atomName) . atom) (specials opts) }
 
 -- | Read FormatOptions from a Dhall file. Returns default options if file doesn't exist or fails to parse.

@@ -1,4 +1,12 @@
-let Style = < InlineHead : Integer | Bindings | Newline | TryInline >
+let Step = < InlineFirst : Integer | Bindings | Newline | TryInline >
+
+let Style =
+      < InlineFirst : Integer
+      | Bindings
+      | Newline
+      | TryInline
+      | Strategy : List Step
+      >
 
 let AlignStyle = < Normal | Align >
 
@@ -6,7 +14,7 @@ let AlignRule = { alignAtom : Text, alignStyle : AlignStyle }
 
 let Special = { atom : Text, style : Style }
 
-let LispFormatConfig =
+let Config =
       { Type =
           { indentWidth : Integer
           , inlineMaxWidth : Integer
@@ -17,29 +25,27 @@ let LispFormatConfig =
           , preserveBlankLines : Bool
           }
       , default =
-        { specials = [] : List Special
-        , aligns = [] : List AlignRule
+        { specials =
+              [ { atom = "if", style = Style.InlineFirst +1 }
+              , { atom = "cond", style = Style.InlineFirst +1 }
+              , { atom = "define", style = Style.InlineFirst +2 }
+              , { atom = "defn", style = Style.InlineFirst +2 }
+              , { atom = "define-function", style = Style.InlineFirst +1 }
+              , { atom = "fn", style = Style.InlineFirst +2 }
+              , { atom = "let", style = Style.Bindings }
+              ]
+            : List Special
+        , aligns =
+              [ { alignAtom = "fn", alignStyle = AlignStyle.Normal }
+              , { alignAtom = "let", alignStyle = AlignStyle.Align }
+              , { alignAtom = "define-function"
+                , alignStyle = AlignStyle.Normal
+                }
+              , { alignAtom = "defn", alignStyle = AlignStyle.Normal }
+              ]
+            : List AlignRule
         , preserveBlankLines = True
         }
       }
 
-in  LispFormatConfig::{
-    , indentWidth = +2
-    , inlineMaxWidth = +80
-    , defaultStyle = Style.InlineHead +1
-    , defaultAlign = AlignStyle.Align
-    , preserveBlankLines = True
-    , specials =
-      [ { atom = "if", style = Style.InlineHead +1 }
-      , { atom = "cond", style = Style.InlineHead +1 }
-      , { atom = "define", style = Style.InlineHead +2 }
-      , { atom = "define-function", style = Style.InlineHead +1 }
-      , { atom = "fn", style = Style.InlineHead +2 }
-      , { atom = "let", style = Style.Bindings }
-      ]
-    , aligns =
-      [ { alignAtom = "fn", alignStyle = AlignStyle.Normal }
-      , { alignAtom = "let", alignStyle = AlignStyle.Align }
-      , { alignAtom = "define-function", alignStyle = AlignStyle.Normal }
-      ]
-    }
+in  Config

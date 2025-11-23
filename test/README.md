@@ -36,7 +36,7 @@ This test suite uses [hspec-golden](https://hackage.haskell.org/package/hspec-go
 
 The formatter supports different formatting strategies for special forms:
 
-- **InlineHead n**: Inline the first `n` arguments, rest on new lines (original behavior)
+- **InlineFirst n**: Inline the first `n` arguments, rest on new lines (original behavior)
 - **InlineAlign n**: Inline first `n` arguments (unless exceeding line width), rest align with last inlined argument
 - **Newline**: Always put arguments on new lines
 - **TryInline**: Try to inline all arguments unless exceeding line width

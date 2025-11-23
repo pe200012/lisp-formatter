@@ -11,8 +11,8 @@ module Lib
   , setAlignRule
   , removeAlignRule
   , setPreserveBlankLines
-  , setSpecialInlineHead
-  , removeSpecialInlineHead
+  , setSpecialInlineFirst
+  , removeSpecialInlineFirst
   , readFormatOptionsFromFile
   , readFormatOptions
   , readFormatOptionsFromPath
@@ -26,14 +26,14 @@ import           Config    ( defaultOptions
                            , readFormatOptionsFromFile
                            , readFormatOptionsFromPath
                            , removeAlignRule
-                           , removeSpecialInlineHead
+                           , removeSpecialInlineFirst
                            , setAlignRule
                            , setDefaultAlign
                            , setDefaultStyle
                            , setIndentWidth
                            , setInlineMaxWidth
                            , setPreserveBlankLines
-                           , setSpecialInlineHead
+                           , setSpecialInlineFirst
                            )
 
 import           Data.Text ( Text )

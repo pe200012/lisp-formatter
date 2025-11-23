@@ -7,9 +7,9 @@ let AlignStyle = defaults.AlignStyle
 in  defaults.LispFormatConfig::{
     , indentWidth = +2
     , inlineMaxWidth = +80
-    , defaultStyle = Style.InlineHead +1
+    , defaultStyle = Style.InlineFirst +1
     , defaultAlign = AlignStyle.Align
-    , specials = [ { atom = "test", style = Style.InlineHead +2 } ]
+    , specials = [ { atom = "test", style = Style.InlineFirst +2 } ]
     , aligns = [ { alignAtom = "test", alignStyle = AlignStyle.Align } ]
     , preserveBlankLines = False
     }
