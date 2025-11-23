@@ -1,29 +1,10 @@
-let Style = < InlineHead : Integer | Bindings | Newline | TryInline >
+let defaults = ../../defaults.lisp-format
 
-let AlignStyle = < Normal | Align >
+let Style = defaults.Style
 
-let AlignRule = { alignAtom : Text, alignStyle : AlignStyle }
+let AlignStyle = defaults.AlignStyle
 
-let Special = { atom : Text, style : Style }
-
-let LispFormatConfig =
-      { Type =
-          { indentWidth : Integer
-          , inlineMaxWidth : Integer
-          , defaultStyle : Style
-          , defaultAlign : AlignStyle
-          , specials : List Special
-          , aligns : List AlignRule
-          , preserveBlankLines : Bool
-          }
-      , default =
-        { specials = [] : List Special
-        , aligns = [] : List AlignRule
-        , preserveBlankLines = True
-        }
-      }
-
-in  LispFormatConfig::{
+in  defaults.LispFormatConfig::{
     , indentWidth = +4
     , inlineMaxWidth = +80
     , defaultStyle = Style.InlineHead +1

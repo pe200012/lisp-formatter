@@ -5,6 +5,7 @@ module Types
   ( FormatError(..)
   , FormatOptions(..)
   , FormatStyle(..)
+  , StrategyStyle(..)
   , AlignStyle(..)
   , Special(..)
   , AlignRule(..)
@@ -16,7 +17,8 @@ module Types
 
 import           Data.Text    ( Text )
 
-import           Dhall        ( FromDhall )
+import           Dhall        ( FromDhall(..) )
+import qualified Dhall
 
 import           GHC.Generics ( Generic )
 
@@ -35,12 +37,32 @@ instance FromDhall AlignStyle
 -- | Formatting style for special forms.
 data FormatStyle
   = InlineHead !Int          -- ^ Inline first N arguments, then force newlines for rest
-  | Bindings        -- ^ Bindings (formatted in pairs)
+  | Bindings                 -- ^ Bindings (formatted in pairs)
   | Newline                  -- ^ Always newline
   | TryInline                -- ^ Try inline all unless line width not enough
+  | Strategy [ StrategyStyle ] -- ^ Try a list of candidate styles in order
   deriving ( Eq, Show, Generic )
 
 instance FromDhall FormatStyle
+
+-- | Individual steps used by the 'Strategy' style.
+data StrategyStyle
+  = StrategyInlineHead !Int
+  | StrategyBindings
+  | StrategyNewline
+  | StrategyTryInline
+  deriving ( Eq, Show, Generic )
+
+instance FromDhall StrategyStyle where
+  autoWith _ = strategyStyleDecoder
+
+strategyStyleDecoder :: Dhall.Decoder StrategyStyle
+strategyStyleDecoder
+  = Dhall.union
+    (Dhall.constructor "InlineHead" (StrategyInlineHead <$> Dhall.auto)
+     <> Dhall.constructor "Bindings" (StrategyBindings <$ Dhall.unit)
+     <> Dhall.constructor "Newline" (StrategyNewline <$ Dhall.unit)
+     <> Dhall.constructor "TryInline" (StrategyTryInline <$ Dhall.unit))
 
 -- | Configuration for the formatter.
 data Special = Special { atom :: !Text, style :: !FormatStyle }

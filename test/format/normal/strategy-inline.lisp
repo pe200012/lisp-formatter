@@ -1,0 +1,1 @@
+(strategy-inline foo bar baz)

@@ -5,7 +5,7 @@
 
 module Formatter ( renderProgram ) where
 
-import           Control.Monad.Reader ( MonadReader(local), Reader, ask, asks, runReader )
+import           Control.Monad.Reader ( MonadReader(local), Reader, asks, runReader )
 
 import           Data.List            ( find )
 import           Data.List.NonEmpty   ( NonEmpty((:|)) )
@@ -22,6 +22,7 @@ import           Types                ( AlignRule(..)
                                       , QuoteKind(..)
                                       , SExpr(..)
                                       , Special(..)
+                                      , StrategyStyle(..)
                                       )
 
 data Doc
@@ -122,7 +123,7 @@ formatSExpr (List delimTyp nodes) = do
 formatList
   :: FormatStyle -> AlignStyle -> Text -> Text -> Node -> NonEmpty Node -> Reader FormatState Doc
 formatList atStyle atAlignStyle open close at rest = case atStyle of
-  InlineHead n -> do
+  InlineHead n   -> do
     maxWidth <- asks (inlineMaxWidth . options)
     indSize <- asks (indentWidth . options)
     let ( inlineArgs, newlineArgs ) = splitArguments n (NL.toList rest)
@@ -157,7 +158,7 @@ formatList atStyle atAlignStyle open close at rest = case atStyle of
       | estimateLength oneline <= maxWidth -> return oneline
       | estimateLength stair <= maxWidth -> return stair
       | otherwise -> formatList Newline atAlignStyle open close at rest
-  Bindings     -> let
+  Bindings       -> let
       binding :| bodyArgs = rest
     in 
       case binding of
@@ -192,12 +193,12 @@ formatList atStyle atAlignStyle open close at rest = case atStyle of
                 []        -> []
                 (hd : tl) -> [ NewlineNode 1, Indent twolineIndent (hd :| tl) ]
         _ -> formatList Newline atAlignStyle open close at rest
-  Newline      -> do
+  Newline        -> do
     atDoc <- formatNode at
     restDocs <- mapM formatNode rest
     indent <- asks (indentWidth . options)
     return $ Embrace open close (Seq (atDoc :| [ NewlineNode 1, Indent indent restDocs ]))
-  TryInline    -> do
+  TryInline      -> do
     maxWidth <- asks (inlineMaxWidth . options)
     indent <- asks (indentWidth . options)
     let oneline  = Embrace open close $ Liner $ NL.cons (plainNode at) (plainNode <$> rest)
@@ -210,6 +211,30 @@ formatList atStyle atAlignStyle open close at rest = case atStyle of
       | estimateLength oneline <= maxWidth -> return oneline
       | estimateLength twolines <= maxWidth -> return twolines
       | otherwise -> formatList Newline atAlignStyle open close at rest
+  Strategy steps -> do
+    opts <- asks options
+    let actualMaxWidth = inlineMaxWidth opts
+        candidateStyles = fmap strategyStepToStyle steps
+        tryStyles [] = fallback
+        tryStyles (styleCandidate : remaining) = do
+          doc <- withUnlimitedWidth $ formatList styleCandidate atAlignStyle open close at rest
+          if estimateLength doc <= actualMaxWidth
+            then pure doc
+            else tryStyles remaining
+        fallbackOptions = defaultStyle opts
+        fallback = case fallbackOptions of
+          Strategy fallbackSteps
+            | fmap strategyStepToStyle fallbackSteps
+              == candidateStyles -> formatList Newline atAlignStyle open close at rest
+            | otherwise -> formatList (Strategy fallbackSteps) atAlignStyle open close at rest
+          other -> formatList other atAlignStyle open close at rest
+        withUnlimitedWidth = local (\st -> let
+                                        opts' = (options st) { inlineMaxWidth = maxBound }
+                                      in 
+                                        st { options = opts' })
+    if null candidateStyles
+      then fallback
+      else tryStyles candidateStyles
 
 formatBindings :: DelimiterType -> Int -> [ Node ] -> Doc
 formatBindings delim align nodes = case chunksOf 2 nodes of
@@ -285,3 +310,10 @@ encodeString txt = "\"" <> T.concatMap escapeChar txt <> "\""
     escapeChar '\r' = "\\r"
     escapeChar '\t' = "\\t"
     escapeChar c    = T.singleton c
+
+strategyStepToStyle :: StrategyStyle -> FormatStyle
+strategyStepToStyle = \case
+  StrategyInlineHead n -> InlineHead n
+  StrategyBindings     -> Bindings
+  StrategyNewline      -> Newline
+  StrategyTryInline    -> TryInline
