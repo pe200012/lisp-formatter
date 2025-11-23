@@ -135,7 +135,9 @@ formatList atStyle atAlignStyle open close at rest = case atStyle of
             Normal -> indSize
       return $ Embrace open close $ Seq $ Liner inlined :| case newlineDocs of
         []        -> []
-        (hd : tl) -> [ NewlineNode 1, Indent indent (hd :| tl) ]
+        (hd : tl) -> case NL.last (at :| inlineArgs) of
+          NodeComment {} -> [ Indent indent (hd :| tl) ]
+          _ -> [ NewlineNode 1, Indent indent (hd :| tl) ]
     stair <- do
       atDoc <- formatNode at
       let inlineDocs = plainNode <$> inlineArgs
@@ -259,7 +261,7 @@ estimateAlignWidth nodes@(_ : _ : _)
 plainNode :: Node -> Text
 plainNode (NodeExpr sexpr)         = plainSExpr sexpr
 plainNode (NodeExprRaw _sexpr raw) = raw
-plainNode (NodeComment text)       = ";" <> text
+plainNode (NodeComment text)       = ";" <> text <> "\n"
 plainNode (NodeBlankLine n)        = T.replicate n "\n"
 
 plainSExpr :: SExpr -> Text
