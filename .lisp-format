@@ -1,51 +1,9 @@
-let Step = < InlineFirst : Integer | Bindings | Newline | TryInline >
+let defaults = ./test/defaults.lisp-format
 
-let Style =
-      < InlineFirst : Integer
-      | Bindings
-      | Newline
-      | TryInline
-      | Strategy : List Step
-      >
-
-let AlignStyle = < Normal | Align >
-
-let AlignRule = { alignAtom : Text, alignStyle : AlignStyle }
-
-let Special = { atom : Text, style : Style }
-
-let Config =
-      { Type =
-          { indentWidth : Integer
-          , inlineMaxWidth : Integer
-          , defaultStyle : Style
-          , defaultAlign : AlignStyle
-          , specials : List Special
-          , aligns : List AlignRule
-          , preserveBlankLines : Bool
-          }
-      , default =
-        { specials =
-              [ { atom = "if", style = Style.InlineFirst +1 }
-              , { atom = "cond", style = Style.InlineFirst +1 }
-              , { atom = "define", style = Style.InlineFirst +2 }
-              , { atom = "defn", style = Style.InlineFirst +2 }
-              , { atom = "define-function", style = Style.InlineFirst +1 }
-              , { atom = "fn", style = Style.InlineFirst +2 }
-              , { atom = "let", style = Style.Bindings }
-              ]
-            : List Special
-        , aligns =
-              [ { alignAtom = "fn", alignStyle = AlignStyle.Normal }
-              , { alignAtom = "let", alignStyle = AlignStyle.Align }
-              , { alignAtom = "define-function"
-                , alignStyle = AlignStyle.Normal
-                }
-              , { alignAtom = "defn", alignStyle = AlignStyle.Normal }
-              ]
-            : List AlignRule
-        , preserveBlankLines = True
-        }
-      }
-
-in  Config
+in  defaults.LispFormatConfig::{
+    , indentWidth = +2
+    , inlineMaxWidth = +80
+    , defaultStyle = defaults.Style.InlineFirst +1
+    , defaultAlign = defaults.AlignStyle.Align
+    , preserveBlankLines = False
+    }

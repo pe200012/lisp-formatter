@@ -1,7 +1,14 @@
-let Step = < InlineFirst : Integer | Bindings | Newline | TryInline >
+let Step =
+      < InlineFirst : Integer
+      | InlineWidth : Integer
+      | Bindings
+      | Newline
+      | TryInline
+      >
 
 let Style =
       < InlineFirst : Integer
+      | InlineWidth : Integer
       | Bindings
       | Newline
       | TryInline
@@ -14,6 +21,23 @@ let AlignRule = { alignAtom : Text, alignStyle : AlignStyle }
 
 let Special = { atom : Text, style : Style }
 
+let defaultSpecials =
+      [ { atom = "if", style = Style.InlineFirst +1 }
+      , { atom = "cond", style = Style.InlineFirst +1 }
+      , { atom = "define", style = Style.InlineFirst +2 }
+      , { atom = "defn", style = Style.InlineFirst +2 }
+      , { atom = "define-function", style = Style.InlineFirst +1 }
+      , { atom = "fn", style = Style.InlineFirst +2 }
+      , { atom = "let", style = Style.Bindings }
+      ]
+
+let defaultAligns =
+      [ { alignAtom = "fn", alignStyle = AlignStyle.Normal }
+      , { alignAtom = "let", alignStyle = AlignStyle.Align }
+      , { alignAtom = "define-function", alignStyle = AlignStyle.Normal }
+      , { alignAtom = "defn", alignStyle = AlignStyle.Normal }
+      ]
+
 let LispFormatConfig =
       { Type =
           { indentWidth : Integer
@@ -25,25 +49,8 @@ let LispFormatConfig =
           , preserveBlankLines : Bool
           }
       , default =
-        { specials =
-              [ { atom = "if", style = Style.InlineFirst +1 }
-              , { atom = "cond", style = Style.InlineFirst +1 }
-              , { atom = "define", style = Style.InlineFirst +2 }
-              , { atom = "defn", style = Style.InlineFirst +2 }
-              , { atom = "define-function", style = Style.InlineFirst +1 }
-              , { atom = "fn", style = Style.InlineFirst +2 }
-              , { atom = "let", style = Style.Bindings }
-              ]
-            : List Special
-        , aligns =
-              [ { alignAtom = "fn", alignStyle = AlignStyle.Normal }
-              , { alignAtom = "let", alignStyle = AlignStyle.Align }
-              , { alignAtom = "define-function"
-                , alignStyle = AlignStyle.Normal
-                }
-              , { alignAtom = "defn", alignStyle = AlignStyle.Normal }
-              ]
-            : List AlignRule
+        { specials = defaultSpecials
+        , aligns = defaultAligns
         , preserveBlankLines = True
         }
       }

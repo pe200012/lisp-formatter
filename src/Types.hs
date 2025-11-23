@@ -37,6 +37,7 @@ instance FromDhall AlignStyle
 -- | Formatting style for special forms.
 data FormatStyle
   = InlineFirst !Int          -- ^ Inline first N arguments, then force newlines for rest
+  | InlineWidth !Int          -- ^ Inline as many arguments as possible until width N is reached
   | Bindings                 -- ^ Bindings (formatted in pairs)
   | Newline                  -- ^ Always newline
   | TryInline                -- ^ Try inline all unless line width not enough
@@ -48,6 +49,7 @@ instance FromDhall FormatStyle
 -- | Individual steps used by the 'Strategy' style.
 data StrategyStyle
   = StrategyInlineFirst !Int
+  | StrategyInlineWidth !Int
   | StrategyBindings
   | StrategyNewline
   | StrategyTryInline
@@ -60,6 +62,7 @@ strategyStyleDecoder :: Dhall.Decoder StrategyStyle
 strategyStyleDecoder
   = Dhall.union
     (Dhall.constructor "InlineFirst" (StrategyInlineFirst <$> Dhall.auto)
+     <> Dhall.constructor "InlineWidth" (StrategyInlineWidth <$> Dhall.auto)
      <> Dhall.constructor "Bindings" (StrategyBindings <$ Dhall.unit)
      <> Dhall.constructor "Newline" (StrategyNewline <$ Dhall.unit)
      <> Dhall.constructor "TryInline" (StrategyTryInline <$ Dhall.unit))

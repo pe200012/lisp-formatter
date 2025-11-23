@@ -160,6 +160,43 @@ formatList atStyle atAlignStyle open close at rest = case atStyle of
       | estimateLength oneline <= maxWidth -> return oneline
       | estimateLength stair <= maxWidth -> return stair
       | otherwise -> formatList Newline atAlignStyle open close at rest
+  InlineWidth n  -> do
+    maxWidth <- asks (inlineMaxWidth . options)
+    indSize <- asks (indentWidth . options)
+    let ( inlineArgs, newlineArgs ) = splitByWidth n (NL.toList rest)
+    oneline <- do
+      newlineDocs <- mapM formatNode newlineArgs
+      let inlined = plainNode <$> at :| inlineArgs
+          indent  = case atAlignStyle of
+            Align  -> estimateAlignWidth (NL.toList inlined) + 1
+            Normal -> indSize
+      return $ Embrace open close $ Seq $ Liner inlined :| case newlineDocs of
+        []        -> []
+        (hd : tl) -> case NL.last (at :| inlineArgs) of
+          NodeComment {} -> [ Indent indent (hd :| tl) ]
+          _ -> [ NewlineNode 1, Indent indent (hd :| tl) ]
+    stair <- do
+      atDoc <- formatNode at
+      let inlineDocs = plainNode <$> inlineArgs
+          indent     = case atAlignStyle of
+            Align  -> estimateAlignWidth inlineDocs + 1 + indSize
+            Normal -> indSize
+      newlineDocs <- mapM formatNode newlineArgs
+      return
+        $ Embrace open close
+        $ Seq
+        $ atDoc
+        :| (case inlineDocs of
+              []        -> []
+              (hd : tl)
+                -> [ NewlineNode 1, Indent (indSize * 2) $ NL.singleton (Liner (hd :| tl)) ])
+        <> (case newlineDocs of
+              []        -> []
+              (hd : tl) -> [ NewlineNode 1, Indent indent (hd :| tl) ])
+    if
+      | estimateLength oneline <= maxWidth -> return oneline
+      | estimateLength stair <= maxWidth -> return stair
+      | otherwise -> formatList Newline atAlignStyle open close at rest
   Bindings       -> let
       binding :| bodyArgs = rest
     in 
@@ -289,6 +326,20 @@ splitArguments n xs = go n xs []
     go _ (y@NodeComment {} : ys) acc = ( reverse (y : acc), ys )
     go m (y : ys) acc = go (m - 1) ys (y : acc)
 
+splitByWidth :: Int -> [ Node ] -> ( [ Node ], [ Node ] )
+splitByWidth maxWidth xs = go xs [] 0
+  where
+    go [] acc _ = ( reverse acc, [] )
+    go (y@NodeComment {} : ys) acc _ = ( reverse (y : acc), ys )
+    go (y : ys) acc currentWidth
+      = let
+          yWidth   = T.length (plainNode y) + 1  -- +1 for space
+          newWidth = currentWidth + yWidth
+        in 
+          if newWidth <= maxWidth
+            then go ys (y : acc) newWidth
+            else ( reverse acc, y : ys )
+
 delimiters :: DelimiterType -> ( Text, Text )
 delimiters delimTyp = case delimTyp of
   Paren   -> ( "(", ")" )
@@ -316,6 +367,7 @@ encodeString txt = "\"" <> T.concatMap escapeChar txt <> "\""
 strategyStepToStyle :: StrategyStyle -> FormatStyle
 strategyStepToStyle = \case
   StrategyInlineFirst n -> InlineFirst n
+  StrategyInlineWidth n -> InlineWidth n
   StrategyBindings      -> Bindings
   StrategyNewline       -> Newline
   StrategyTryInline     -> TryInline
