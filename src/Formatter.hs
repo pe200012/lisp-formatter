@@ -5,9 +5,10 @@
 
 module Formatter ( renderProgram ) where
 
+import           Control.Monad                  ( foldM )
 import           Control.Monad.Reader ( MonadReader(local), Reader, asks, runReader )
 
-import           Data.List            ( find )
+import           Data.List            ( find, intersperse )
 import           Data.List.NonEmpty   ( NonEmpty((:|)) )
 import qualified Data.List.NonEmpty   as NL
 import           Data.Text            ( Text )
@@ -46,7 +47,7 @@ estimateLength EmptyNode = 0
 estimateLength NewlineNode {} = 0
 estimateLength (Prefix pre doc) = T.length pre + estimateLength doc
 
-newtype FormatState = FormatState { options :: FormatOptions }
+data FormatState = FormatState { options :: FormatOptions, currentColumn :: Int }
 
 renderDoc :: Int -> Doc -> Text
 renderDoc indent (Embrace open close content) = open <> renderDoc indent content <> close
@@ -69,7 +70,7 @@ renderProgram opts nodes = T.concat $ map (renderDoc 0) (sep activeNodes txt [])
                               NodeBlankLine {} -> False
                               _ -> True) nodes
 
-    txt = mapM formatNode activeNodes `runReader` FormatState { options = opts }
+    txt = mapM formatNode activeNodes `runReader` FormatState { options = opts, currentColumn = 0 }
 
     sep [] _ acc = reverse acc
     sep _ [] acc = reverse acc
@@ -115,7 +116,7 @@ formatSExpr (List delimTyp nodes) = do
           NodeExpr (Atom t) -> t
           NodeExprRaw (Atom t) _ -> t
           _ -> ""
-      in 
+      in
         formatList atStyle atAlignStyle open close at (rh :| rest)
   where
     ( open, close ) = delimiters delimTyp
@@ -123,7 +124,7 @@ formatSExpr (List delimTyp nodes) = do
 formatList
   :: FormatStyle -> AlignStyle -> Text -> Text -> Node -> NonEmpty Node -> Reader FormatState Doc
 formatList atStyle atAlignStyle open close at rest = case atStyle of
-  InlineFirst n  -> do
+  InlineFirst n -> do
     maxWidth <- asks (inlineMaxWidth . options)
     indSize <- asks (indentWidth . options)
     let ( inlineArgs, newlineArgs ) = splitArguments n (NL.toList rest)
@@ -160,7 +161,43 @@ formatList atStyle atAlignStyle open close at rest = case atStyle of
       | estimateLength oneline <= maxWidth -> return oneline
       | estimateLength stair <= maxWidth -> return stair
       | otherwise -> formatList Newline atAlignStyle open close at rest
-  InlineWidth n  -> do
+  FlexibleInlineFirst n -> do
+    indSize <- asks (indentWidth . options)
+    maxWidth <- asks (inlineMaxWidth . options)
+    col <- asks currentColumn
+    let (inlineArgs, newlineArgs) = splitArguments n (NL.toList rest)
+    atDoc <- formatNode at
+    let atLen = estimateLength atDoc
+        initialCol = col + 1 + atLen + 1  -- After "( at "
+    -- Format inline args sequentially, tracking column
+    (inlineDocs, _finalCol) <- foldM
+      (\(docs, currentCol) arg -> do
+        let reducedMaxWidth = maxWidth - currentCol
+        doc <- local (\st -> st { currentColumn = currentCol, options = (options st) { inlineMaxWidth = reducedMaxWidth } }) $ formatNode arg
+        let docLen = estimateLength doc
+            nextCol = currentCol + docLen + 1  -- +1 for space after this arg
+        return (docs ++ [doc], nextCol))
+      ([], initialCol)
+      inlineArgs
+    newlineDocs <- mapM formatNode newlineArgs
+    let allInlined = atDoc : inlineDocs
+        inlinedSeq = case allInlined of
+          []    -> EmptyNode
+          [x]   -> x
+          xs    -> Seq (NL.fromList $ intersperse (TextNode " ") xs)
+        indent = case atAlignStyle of
+          -- For Align: col + opening paren + width of all but last inline + spaces between
+          Align  -> col + 1 + (if length allInlined >= 2
+                               then sum (estimateLength <$> take (length allInlined - 1) allInlined) + (length allInlined - 1)
+                               else 0)
+          Normal -> indSize
+        resultDocs = case newlineDocs of
+          []        -> inlinedSeq :| []
+          (hd : tl) -> case NL.last (at :| inlineArgs) of
+            NodeComment {} -> inlinedSeq :| [Indent indent (hd :| tl)]
+            _              -> inlinedSeq :| [NewlineNode 1, Indent indent (hd :| tl)]
+    return $ Embrace open close $ Seq resultDocs
+  InlineWidth n -> do
     maxWidth <- asks (inlineMaxWidth . options)
     indSize <- asks (indentWidth . options)
     let ( inlineArgs, newlineArgs ) = splitByWidth n (NL.toList rest)
@@ -197,9 +234,9 @@ formatList atStyle atAlignStyle open close at rest = case atStyle of
       | estimateLength oneline <= maxWidth -> return oneline
       | estimateLength stair <= maxWidth -> return stair
       | otherwise -> formatList Newline atAlignStyle open close at rest
-  Bindings       -> let
+  Bindings -> let
       binding :| bodyArgs = rest
-    in 
+    in
       case binding of
         NodeExpr (List delim nodes) -> do
           atNode <- formatNode at
@@ -232,12 +269,12 @@ formatList atStyle atAlignStyle open close at rest = case atStyle of
                 []        -> []
                 (hd : tl) -> [ NewlineNode 1, Indent twolineIndent (hd :| tl) ]
         _ -> formatList Newline atAlignStyle open close at rest
-  Newline        -> do
+  Newline -> do
     atDoc <- formatNode at
     restDocs <- mapM formatNode rest
     indent <- asks (indentWidth . options)
     return $ Embrace open close (Seq (atDoc :| [ NewlineNode 1, Indent indent restDocs ]))
-  TryInline      -> do
+  TryInline -> do
     maxWidth <- asks (inlineMaxWidth . options)
     indent <- asks (indentWidth . options)
     let oneline  = Embrace open close $ Liner $ NL.cons (plainNode at) (plainNode <$> rest)
@@ -269,7 +306,7 @@ formatList atStyle atAlignStyle open close at rest = case atStyle of
           other -> formatList other atAlignStyle open close at rest
         withUnlimitedWidth = local (\st -> let
                                         opts' = (options st) { inlineMaxWidth = maxBound }
-                                      in 
+                                      in
                                         st { options = opts' })
     if null candidateStyles
       then fallback
@@ -282,7 +319,7 @@ formatBindings delim align nodes = case chunksOf 2 nodes of
   (firstPair : restPairs) -> let
       firstLine = Liner (NL.fromList (plainNode <$> firstPair))
       restLines = (\pair -> Liner (NL.fromList (plainNode <$> pair))) <$> restPairs
-    in 
+    in
       Embrace open close
       $ Seq
       $ firstLine :| [ NewlineNode 1, Indent align (NL.fromList restLines) ]
@@ -335,7 +372,7 @@ splitByWidth maxWidth xs = go xs [] 0
       = let
           yWidth   = T.length (plainNode y) + 1  -- +1 for space
           newWidth = currentWidth + yWidth
-        in 
+        in
           if newWidth <= maxWidth
             then go ys (y : acc) newWidth
             else ( reverse acc, y : ys )
@@ -367,7 +404,8 @@ encodeString txt = "\"" <> T.concatMap escapeChar txt <> "\""
 strategyStepToStyle :: StrategyStyle -> FormatStyle
 strategyStepToStyle = \case
   StrategyInlineFirst n -> InlineFirst n
+  StrategyFlexibleInlineFirst n -> FlexibleInlineFirst n
   StrategyInlineWidth n -> InlineWidth n
-  StrategyBindings      -> Bindings
-  StrategyNewline       -> Newline
-  StrategyTryInline     -> TryInline
+  StrategyBindings -> Bindings
+  StrategyNewline -> Newline
+  StrategyTryInline -> TryInline

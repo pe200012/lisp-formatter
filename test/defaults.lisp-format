@@ -1,5 +1,6 @@
 let Step =
       < InlineFirst : Integer
+      | FlexibleInlineFirst : Integer
       | InlineWidth : Integer
       | Bindings
       | Newline
@@ -8,6 +9,7 @@ let Step =
 
 let Style =
       < InlineFirst : Integer
+      | FlexibleInlineFirst : Integer
       | InlineWidth : Integer
       | Bindings
       | Newline

@@ -1,0 +1,1 @@
+(test (should-be-inlined a b c) (also-be-inlined d e) (flexible f g h))
