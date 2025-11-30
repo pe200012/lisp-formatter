@@ -1,0 +1,13 @@
+let defaults = ../../defaults.lisp-format
+
+let Style = defaults.Style
+
+let AlignStyle = defaults.AlignStyle
+
+in  defaults.LispFormatConfig::{
+    , indentWidth = +2
+    , inlineMaxWidth = +50
+    , defaultStyle = Style.InlineFirst +3
+    , defaultAlign = AlignStyle.Align
+    , preserveBlankLines = False
+    }

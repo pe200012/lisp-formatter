@@ -1,6 +1,5 @@
 (define
   my-long-variable-name
-  (some-computation-that-is-quite-lengthy
-      arg1
-     arg2
-     arg3))
+  (some-computation-that-is-quite-lengthy arg1
+                                          arg2
+                                          arg3))

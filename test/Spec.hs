@@ -21,6 +21,8 @@ import           System.FilePath   ( (</>), replaceExtension, takeBaseName )
 import           Test.Hspec
 import           Test.Hspec.Golden hiding ( output )
 
+import           Types             ( Node(..), SExpr(..) )
+
 main :: IO ()
 main = do
   hspec spec
@@ -74,6 +76,10 @@ spec = do
 
   describe "parseProgram - parser tests" parserTest
 
+  describe "formatLisp - roundtrip" $ do
+    roundtripTest "test/format/normal"
+    roundtripTest "test/format/whitespace"
+
 isLeft :: Either a b -> Bool
 isLeft (Left _) = True
 isLeft _        = False
@@ -107,3 +113,39 @@ formatTest folder = do
             Right out -> out
             Left err  -> error $ "Format failed: " ++ show err
       defaultGolden name result
+
+roundtripTest :: FilePath -> Spec
+roundtripTest folder = do
+  files <- runIO (discoverDataFiles folder)
+  for_ files $ \filePath -> do
+    input <- runIO (T.unpack <$> TIO.readFile filePath)
+    let name           = takeBaseName filePath
+        configFilePath = replaceExtension filePath ".lisp-format"
+        folderConfig   = folder </> ".lisp-format"
+    specficConfigExists <- runIO (doesFileExist configFilePath)
+    configPath <- if specficConfigExists
+      then runIO (readFormatOptionsFromPath (Just configFilePath))
+      else runIO (readFormatOptionsFromPath (Just folderConfig))
+    it ("roundtrip " <> name) $ do
+      -- Format the input
+      let formatted = case formatLisp configPath input of
+            Right out -> out
+            Left err  -> error $ "Format failed: " ++ show err
+      -- Parse the original input
+      let originalAst = case parseProgram (T.pack input) of
+            Right ast -> ast
+            Left err  -> error $ "Parse original failed: " ++ err
+      -- Parse the formatted output
+      let formattedAst = case parseProgram (T.pack formatted) of
+            Right ast -> ast
+            Left err  -> error $ "Parse formatted failed: " ++ err
+      -- Compare ASTs with blank lines filtered out
+      filterBlankLines formattedAst `shouldBe` filterBlankLines originalAst
+
+-- | Filter out blank line nodes from the AST
+filterBlankLines :: [ Node ] -> [ Node ]
+filterBlankLines = filter (not . isBlankLine)
+  where
+    isBlankLine :: Node -> Bool
+    isBlankLine (NodeBlankLine _) = True
+    isBlankLine _ = False
